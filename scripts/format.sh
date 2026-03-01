@@ -10,11 +10,6 @@ log() {
     echo "[format.sh] $1" >&2
 }
 
-# Function to check if a command exists
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
 # Function to find project root by looking for common project files
 find_project_root() {
     local dir="$PWD"
@@ -26,6 +21,23 @@ find_project_root() {
         dir="$(dirname "$dir")"
     done
     echo "$PWD"
+}
+
+# Cache command availability to avoid repeated forks (compatible with bash 3.x)
+_cmd_cache=""
+command_exists() {
+    local cmd="$1"
+    case "$_cmd_cache" in
+        *"|${cmd}=1|"*) return 0 ;;
+        *"|${cmd}=0|"*) return 1 ;;
+    esac
+    if command -v "$cmd" >/dev/null 2>&1; then
+        _cmd_cache="${_cmd_cache}|${cmd}=1|"
+        return 0
+    else
+        _cmd_cache="${_cmd_cache}|${cmd}=0|"
+        return 1
+    fi
 }
 
 # Function to format a single file based on its extension and available tools
@@ -43,18 +55,16 @@ format_file() {
 
     # Get file extension
     local ext="${file##*.}"
-    local basename_file="$(basename "$file")"
 
     case "$ext" in
         js|jsx|ts|tsx|mjs|cjs)
             # JavaScript/TypeScript formatting
             if [[ -f "$project_root/package.json" ]]; then
-                cd "$project_root"
-                if command_exists prettier && [[ -f "node_modules/.bin/prettier" || $(npm list --depth=0 prettier 2>/dev/null) ]]; then
-                    npx prettier --write "$file" && formatted=true
-                elif command_exists eslint && [[ -f "node_modules/.bin/eslint" || $(npm list --depth=0 eslint 2>/dev/null) ]]; then
-                    npx eslint --fix "$file" 2>/dev/null && formatted=true
-                elif [[ -f ".prettierrc" || -f ".prettierrc.json" || -f ".prettierrc.js" ]] && command_exists prettier; then
+                if [[ -x "$project_root/node_modules/.bin/prettier" ]]; then
+                    "$project_root/node_modules/.bin/prettier" --write "$file" && formatted=true
+                elif [[ -x "$project_root/node_modules/.bin/eslint" ]]; then
+                    "$project_root/node_modules/.bin/eslint" --fix "$file" 2>/dev/null && formatted=true
+                elif [[ -f "$project_root/.prettierrc" || -f "$project_root/.prettierrc.json" || -f "$project_root/.prettierrc.js" ]] && command_exists prettier; then
                     prettier --write "$file" && formatted=true
                 fi
             elif command_exists prettier; then
@@ -63,8 +73,7 @@ format_file() {
             ;;
         py)
             # Python formatting
-            cd "$project_root"
-            if [[ -f "pyproject.toml" ]] && command_exists ruff; then
+            if [[ -f "$project_root/pyproject.toml" ]] && command_exists ruff; then
                 ruff format "$file" 2>/dev/null && formatted=true
             elif command_exists black; then
                 black "$file" 2>/dev/null && formatted=true
@@ -79,14 +88,9 @@ format_file() {
             fi
             ;;
         rs)
-            # Rust formatting
-            if [[ -f "$project_root/Cargo.toml" ]]; then
-                cd "$project_root"
-                if command_exists cargo; then
-                    cargo fmt --all 2>/dev/null && formatted=true
-                fi
-            elif command_exists rustfmt; then
-                rustfmt "$file" && formatted=true
+            # Rust formatting — format single file, not the whole project
+            if command_exists rustfmt; then
+                rustfmt "$file" 2>/dev/null && formatted=true
             fi
             ;;
         go)
@@ -101,16 +105,19 @@ format_file() {
         java)
             # Java formatting
             if [[ -f "$project_root/pom.xml" ]] && command_exists mvn; then
-                cd "$project_root"
-                mvn fmt:format 2>/dev/null && formatted=true
+                (cd "$project_root" && mvn fmt:format 2>/dev/null) && formatted=true
             elif command_exists google-java-format; then
                 google-java-format --replace "$file" && formatted=true
             fi
             ;;
         rb)
             # Ruby formatting
-            if command_exists rubocop; then
+            if [[ -f "$project_root/Gemfile" ]] && command_exists bundle; then
+                (cd "$project_root" && bundle exec rubocop -a "$file" 2>/dev/null) && formatted=true
+            elif command_exists rubocop; then
                 rubocop -a "$file" 2>/dev/null && formatted=true
+            elif command_exists standardrb; then
+                standardrb --fix "$file" 2>/dev/null && formatted=true
             fi
             ;;
         php)
@@ -134,8 +141,13 @@ format_file() {
         json)
             # JSON formatting
             if command_exists jq; then
-                local temp_file=$(mktemp)
-                jq '.' "$file" > "$temp_file" && mv "$temp_file" "$file" && formatted=true
+                local temp_file
+                temp_file="$file.tmp.$$"
+                if jq '.' "$file" > "$temp_file" 2>/dev/null; then
+                    mv "$temp_file" "$file" && formatted=true
+                else
+                    rm -f "$temp_file"
+                fi
             elif command_exists prettier; then
                 prettier --write "$file" && formatted=true
             fi
@@ -148,7 +160,9 @@ format_file() {
             ;;
         md|markdown)
             # Markdown formatting
-            if command_exists prettier; then
+            if [[ -x "$project_root/node_modules/.bin/prettier" ]]; then
+                "$project_root/node_modules/.bin/prettier" --write "$file" 2>/dev/null && formatted=true
+            elif command_exists prettier; then
                 prettier --write "$file" && formatted=true
             fi
             ;;
@@ -185,14 +199,14 @@ main() {
         done
     else
         # If no arguments, try to format recently modified files
-        # This is useful when the hook doesn't pass specific files
         log "No files specified, checking for recently modified files..."
-        
-        # Look for files modified in the last minute
-        local recent_files
+
         if command_exists git && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-            git diff --name-only HEAD~1 HEAD 2>/dev/null | head -20 | while read -r file; do
-                [[ -n "$file" ]] && format_file "$file" "$project_root"
+            local files
+            files=$(git diff --name-only HEAD 2>/dev/null | head -20) || true
+            local f
+            for f in $files; do
+                [[ -n "$f" ]] && format_file "$f" "$project_root"
             done
         fi
     fi

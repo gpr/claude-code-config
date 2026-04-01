@@ -2,7 +2,7 @@
 # Two-line statusline with visual context progress bar
 #
 # Line 1: Model, folder, branch
-# Line 2: Progress bar, context %, cost, duration
+# Line 2: Progress bar, context %, rate limits, cache hit %
 #
 # Context % uses Claude Code's pre-calculated remaining_percentage,
 # which accounts for compaction reserves. 100% = compaction fires.
@@ -11,16 +11,10 @@
 stdin_data=$(cat)
 
 # Single jq call - extract all values at once
-# Prefer pre-calculated remaining_percentage (100 - remaining = used toward compact)
-# Fall back to manual calc from raw tokens if not available
-IFS=$'\t' read -r current_dir model_name cost lines_added lines_removed duration_ms ctx_used cache_pct < <(
+IFS=$'\t' read -r current_dir model_name ctx_used cache_pct five_hour_pct seven_day_pct < <(
     echo "$stdin_data" | jq -r '[
         .workspace.current_dir // "unknown",
         .model.display_name // "Unknown",
-        (try (.cost.total_cost_usd // 0 | . * 100 | floor / 100) catch 0),
-        (.cost.total_lines_added // 0),
-        (.cost.total_lines_removed // 0),
-        (.cost.total_duration_ms // 0),
         (try (
             if (.context_window.remaining_percentage // null) != null then
                 100 - (.context_window.remaining_percentage | floor)
@@ -37,7 +31,9 @@ IFS=$'\t' read -r current_dir model_name cost lines_added lines_removed duration
                 ((.cache_read_input_tokens // 0) * 100 /
                  ((.input_tokens // 0) + (.cache_read_input_tokens // 0))) | floor
             else 0 end
-        ) catch 0)
+        ) catch 0),
+        (.rate_limits.five_hour.used_percentage // ""),
+        (.rate_limits.seven_day.used_percentage // "")
     ] | @tsv'
 )
 
@@ -45,18 +41,12 @@ IFS=$'\t' read -r current_dir model_name cost lines_added lines_removed duration
 if [ -z "$current_dir" ] && [ -z "$model_name" ]; then
     current_dir=$(echo "$stdin_data" | jq -r '.workspace.current_dir // .cwd // "unknown"' 2>/dev/null)
     model_name=$(echo "$stdin_data" | jq -r '.model.display_name // "Unknown"' 2>/dev/null)
-    cost=$(echo "$stdin_data" | jq -r '(.cost.total_cost_usd // 0)' 2>/dev/null)
-    lines_added=$(echo "$stdin_data" | jq -r '(.cost.total_lines_added // 0)' 2>/dev/null)
-    lines_removed=$(echo "$stdin_data" | jq -r '(.cost.total_lines_removed // 0)' 2>/dev/null)
-    duration_ms=$(echo "$stdin_data" | jq -r '(.cost.total_duration_ms // 0)' 2>/dev/null)
     ctx_used=""
     cache_pct="0"
+    five_hour_pct=""
+    seven_day_pct=""
     : "${current_dir:=unknown}"
     : "${model_name:=Unknown}"
-    : "${cost:=0}"
-    : "${lines_added:=0}"
-    : "${lines_removed:=0}"
-    : "${duration_ms:=0}"
 fi
 
 # Git info
@@ -108,27 +98,10 @@ else
     ctx_pct=""
 fi
 
-# Session time (human-readable)
-if [ "$duration_ms" -gt 0 ] 2>/dev/null; then
-    total_sec=$((duration_ms / 1000))
-    hours=$((total_sec / 3600))
-    minutes=$(((total_sec % 3600) / 60))
-    seconds=$((total_sec % 60))
-    if [ "$hours" -gt 0 ]; then
-        session_time="${hours}h ${minutes}m"
-    elif [ "$minutes" -gt 0 ]; then
-        session_time="${minutes}m ${seconds}s"
-    else
-        session_time="${seconds}s"
-    fi
-else
-    session_time=""
-fi
-
 # Separator
 SEP='\033[2m│\033[0m'
 
-# Get short model name (e.g., "Opus" instead of "Claude 3.5 Opus")
+# Get short model name (e.g., "Sonnet 4.6" instead of "Claude Sonnet 4.6")
 short_model=$(echo "$model_name" | sed -E 's/Claude [0-9.]+ //; s/^Claude //')
 
 # LINE 1: [Model] folder | branch
@@ -138,7 +111,7 @@ if [ -n "$git_branch" ]; then
     line1="$line1 $(printf '%b \033[96m🌿 %s\033[0m' "$SEP" "$git_branch")"
 fi
 
-# LINE 2: Progress bar | Context % | cost | duration
+# LINE 2: Progress bar | Context % | rate limits | cache hit %
 line2=""
 if [ -n "$progress_bar" ]; then
     line2=$(printf '%b' "$progress_bar")
@@ -150,16 +123,29 @@ if [ -n "$ctx_pct" ]; then
         line2=$(printf '\033[37m%s\033[0m' "$ctx_pct")
     fi
 fi
-if [ -n "$line2" ]; then
-    line2="$line2 $(printf '%b \033[33m$%s\033[0m' "$SEP" "$cost")"
-else
-    line2=$(printf '\033[33m$%s\033[0m' "$cost")
+# Rate limits (only shown when present, i.e., Claude.ai subscribers)
+if [ -n "$five_hour_pct" ]; then
+    five_int=$(printf '%.0f' "$five_hour_pct")
+    if [ -n "$line2" ]; then
+        line2="$line2 $(printf '%b \033[35m5h:%s%%\033[0m' "$SEP" "$five_int")"
+    else
+        line2=$(printf '\033[35m5h:%s%%\033[0m' "$five_int")
+    fi
 fi
-if [ -n "$session_time" ]; then
-    line2="$line2 $(printf '%b \033[36m⏱ %s\033[0m' "$SEP" "$session_time")"
+if [ -n "$seven_day_pct" ]; then
+    week_int=$(printf '%.0f' "$seven_day_pct")
+    if [ -n "$line2" ]; then
+        line2="$line2 $(printf '\033[35m7d:%s%%\033[0m' "$week_int")"
+    else
+        line2=$(printf '\033[35m7d:%s%%\033[0m' "$week_int")
+    fi
 fi
 if [ "$cache_pct" -gt 0 ] 2>/dev/null; then
-    line2="$line2 $(printf ' \033[2m↻%s%%\033[0m' "$cache_pct")"
+    if [ -n "$line2" ]; then
+        line2="$line2 $(printf '%b \033[2m↻%s%%\033[0m' "$SEP" "$cache_pct")"
+    else
+        line2=$(printf '\033[2m↻%s%%\033[0m' "$cache_pct")
+    fi
 fi
 
 printf '%b\n\n%b' "$line1" "$line2"

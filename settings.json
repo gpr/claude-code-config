@@ -5,11 +5,93 @@
     "DISABLE_TELEMETRY": "1",
     "DISABLE_ERROR_REPORTING": "1",
     "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "ENABLE_CLAUDEAI_MCP_SERVERS": "false"
   },
-  "plansDirectory": ".claude/plans",
+  "includeGitInstructions": true,
   "permissions": {
+    "allow": [
+      "Task",
+      "Edit",
+      "MultiEdit",
+      "Write",
+      "WebSearch",
+      "TodoWrite",
+      "ExitPlanMode",
+      "Bash(git:*)",
+      "Bash(openspec:*)",
+      "Bash(rg:*)",
+      "Bash(fd:*)",
+      "Bash(mkdir:*)",
+      "Bash(ls:*)",
+      "mcp__plugin_repomix-mcp_repomix__*",
+      "WebFetch(domain:json.schemastore.org)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:registry.yarnpkg.com)",
+      "WebFetch(domain:npmjs.com)",
+      "WebFetch(domain:*.npmjs.org)",
+      "WebFetch(domain:*.githubusercontent.com)",
+      "WebFetch(domain:*.github.com)",
+      "WebFetch(domain:*.gitlab.com)",
+      "WebFetch(domain:*.bitbucket.org)",
+      "WebFetch(domain:*.docker.com)",
+      "WebFetch(domain:*.crates.io)",
+      "WebFetch(domain:*.pypi.org)",
+      "WebFetch(domain:*.rubygems.org)",
+      "WebFetch(domain:*.gitlabusercontent.com)",
+      "WebFetch(domain:*.atlassian.net)",
+      "WebFetch(domain:*.slack.com)",
+      "WebFetch(domain:*.figma.com)",
+      "WebFetch(domain:*.twimg.com)",
+      "WebFetch(domain:*.amazonaws.com)",
+      "WebFetch(domain:*.azure.com)",
+      "WebFetch(domain:*.googleapis.com)",
+      "WebFetch(domain:*.microsoft.com)",
+      "WebFetch(domain:*.cloudflare.com)",
+      "WebFetch(domain:*.digitalocean.com)",
+      "WebFetch(domain:*.heroku.com)",
+      "WebFetch(domain:*.netlify.com)",
+      "WebFetch(domain:*.vercel.com)",
+      "WebFetch(domain:*.render.com)",
+      "WebFetch(domain:*.fly.dev)",
+      "WebFetch(domain:*.gcp.com)",
+      "WebFetch(domain:*.oraclecloud.com)",
+      "WebFetch(domain:*.ibm.com)",
+      "WebFetch(domain:*.salesforce.com)",
+      "WebFetch(domain:*.zendesk.com)",
+      "WebFetch(domain:*.intercom.com)",
+      "WebFetch(domain:*.mixpanel.com)",
+      "WebFetch(domain:*.segment.com)",
+      "WebFetch(domain:*.datadoghq.com)",
+      "WebFetch(domain:*.newrelic.com)",
+      "WebFetch(domain:*.sentry.io)",
+      "WebFetch(domain:*.loggly.com)",
+      "WebFetch(domain:*.papertrailapp.com)",
+      "WebFetch(domain:*.splunk.com)",
+      "WebFetch(domain:*.sumologic.com)",
+      "WebFetch(domain:*.dynatrace.com)",
+      "WebFetch(domain:*.appdynamics.com)",
+      "WebFetch(domain:*.pingdom.com)",
+      "WebFetch(domain:*.uptime.com)",
+      "WebFetch(domain:*.statuspage.io)",
+      "WebFetch(domain:*.pagerduty.com)",
+      "WebFetch(domain:diataxis.fr)",
+      "WebFetch(domain:docs.readthedocs.com)",
+      "WebFetch(domain:diataxis-template.readthedocs.io)",
+      "WebFetch(domain:gist.github.com)",
+      "Bash(uv sync:*)",
+      "Bash(uv run:*)",
+      "Skill(atomic-commit)",
+      "Agent(security-reviewer)",
+      "Bash(prek run:*)"
+    ],
     "deny": [
+      "Bash(ssh:*)",
+      "Bash(scp:*)",
+      "Bash(exec:*)",
+      "Bash(terraform apply:*)",
       "Bash(rm -rf *)",
       "Bash(rm -fr *)",
       "Bash(sudo *)",
@@ -41,9 +123,12 @@
       "Read(~/Library/Application Support/**/exodus*/**)",
       "Read(~/Library/Application Support/**/phantom*/**)",
       "Read(~/Library/Application Support/**/solflare*/**)"
+    ],
+    "defaultMode": "acceptEdits",
+    "additionalDirectories": [
+      "~/.cache/"
     ]
   },
-  "model": "opus",
   "enableAllProjectMcpServers": false,
   "hooks": {
     "PostToolUse": [
@@ -55,7 +140,9 @@
             "command": "~/.claude/scripts/format.sh"
           }
         ]
-      },
+      }
+    ],
+    "PreToolUse": [
       {
         "matcher": "Bash",
         "hooks": [
@@ -77,25 +164,38 @@
   },
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
-    "github@claude-plugins-official": false,
-    "feature-dev@claude-plugins-official": false,
-    "code-review@claude-plugins-official": true,
-    "commit-commands@claude-plugins-official": false,
-    "security-guidance@claude-plugins-official": true,
-    "agent-sdk-dev@claude-plugins-official": false,
-    "pr-review-toolkit@claude-plugins-official": false,
-    "pyright-lsp@claude-plugins-official": false,
-    "plugin-dev@claude-plugins-official": true,
-    "hookify@claude-plugins-official": true,
-    "greptile@claude-plugins-official": false,
-    "sentry@claude-plugins-official": false,
-    "frontend-design@claude-plugins-official": false,
+    "repomix-mcp@repomix": true,
+    "repomix-commands@repomix": true,
+    "repomix-explorer@repomix": true,
     "typescript-lsp@claude-plugins-official": false,
-    "claude-md-management@claude-plugins-official": true,
-    "claude-code-setup@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "gopls-lsp@claude-plugins-official": false,
+    "rust-analyzer-lsp@claude-plugins-official": false,
+    "clangd-lsp@claude-plugins-official": false,
+    "github@claude-plugins-official": false,
+    "commit-commands@claude-plugins-official": false,
+    "atlassian@claude-plugins-official": false,
+    "agent-sdk-dev@claude-plugins-official": false,
+    "plugin-dev@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": false,
+    "feature-dev@claude-plugins-official": false,
+    "code-review@claude-plugins-official": false,
+    "security-guidance@claude-plugins-official": false,
+    "hookify@claude-plugins-official": false,
+    "sentry@claude-plugins-official": false,
     "code-simplifier@claude-plugins-official": true,
-    "playground@claude-plugins-official": true,
-    "skill-creator@claude-plugins-official": true
+    "playwright@claude-plugins-official": false,
+    "pr-review-toolkit@claude-plugins-official": false,
+    "figma@claude-plugins-official": false,
+    "slack@claude-plugins-official": false,
+    "jdtls-lsp@claude-plugins-official": false,
+    "firebase@claude-plugins-official": false,
+    "claude-code-setup@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "ruby-lsp@claude-plugins-official": false,
+    "remember@claude-plugins-official": false,
+    "terraform@claude-plugins-official": false
   },
   "sandbox": {
     "enabled": true,
@@ -107,13 +207,20 @@
         "registry.yarnpkg.com"
       ],
       "allowUnixSockets": [
-        "/var/run/docker.sock"
+        "/var/run/docker.sock",
+        "/Users/gregory.rome/.orbstack/run/docker.sock"
       ],
       "allowLocalBinding": true
     },
+    "enableWeakerNetworkIsolation": true,
     "excludedCommands": [
-      "docker"
+      "docker",
+      "prek",
+      "git",
+      "aws"
     ]
   },
-  "alwaysThinkingEnabled": true
+  "autoUpdatesChannel": "latest",
+  "plansDirectory": ".claude/plans",
+  "teammateMode": "auto"
 }

@@ -24,6 +24,8 @@
       "Bash(fd:*)",
       "Bash(mkdir:*)",
       "Bash(ls:*)",
+      "Bash(prek run:*)",
+      "Bash(trash:*)",
       "mcp__plugin_repomix-mcp_repomix__*",
       "WebFetch(domain:json.schemastore.org)",
       "WebFetch(domain:github.com)",
@@ -80,12 +82,7 @@
       "WebFetch(domain:diataxis.fr)",
       "WebFetch(domain:docs.readthedocs.com)",
       "WebFetch(domain:diataxis-template.readthedocs.io)",
-      "WebFetch(domain:gist.github.com)",
-      "Bash(uv sync:*)",
-      "Bash(uv run:*)",
-      "Skill(atomic-commit)",
-      "Agent(security-reviewer)",
-      "Bash(prek run:*)"
+      "WebFetch(domain:gist.github.com)"
     ],
     "deny": [
       "Bash(ssh:*)",
@@ -131,28 +128,19 @@
   },
   "enableAllProjectMcpServers": false,
   "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/scripts/format.sh"
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "CMD=$(jq -r '.tool_input.command'); if echo \"$CMD\" | grep -qiE '(^|;[[:space:]]*|&&[[:space:]]*|[|][|][[:space:]]*|[|][[:space:]]*)rm[[:space:]]' && echo \"$CMD\" | grep -qiE '(^|[[:space:]])-[a-zA-Z]*[rR]|--recursive' && echo \"$CMD\" | grep -qiE '(^|[[:space:]])-[a-zA-Z]*[fF]|--force'; then echo 'BLOCKED: Use trash instead of rm -rf' >&2; exit 2; fi"
+            "if": "Bash(rm *)",
+            "command": "CMD=$(jq -r '.tool_input.command'); if echo \"$CMD\" | grep -qiE '(^|[[:space:]])-[a-zA-Z]*[rR]' && echo \"$CMD\" | grep -qiE '(^|[[:space:]])-[a-zA-Z]*[fF]'; then echo 'BLOCKED: Use trash instead of rm -rf' >&2; exit 2; fi"
           },
           {
             "type": "command",
-            "command": "CMD=$(jq -r '.tool_input.command'); if echo \"$CMD\" | grep -qE 'git[[:space:]]+push.*(main|master)'; then echo 'BLOCKED: Use feature branches, not direct push to main' >&2; exit 2; fi"
+            "if": "Bash(git push*)",
+            "command": "CMD=$(jq -r '.tool_input.command'); if echo \"$CMD\" | grep -qE '(main|master)'; then echo 'BLOCKED: Use feature branches' >&2; exit 2; fi"
           }
         ]
       }

@@ -4,6 +4,7 @@
 
 - Use `plugin:repomix-mcp:repomix` MCP tools when you need a broad understanding of project structure, cross-cutting concerns, or multi-module relationships. For targeted searches (specific function, single file, known path), use built-in Read/Grep/Glob.
 - Use `plugin:context7:context7` MCP tools for library documentation when the API is unfamiliar, recently changed, or version-sensitive. Skip for stable, well-known standard library calls.
+- Prefer LSP (symbol lookups, diagnostics) over Grep for finding code references, type errors, and renaming. Use Grep only for string literals, log messages, and comments.
 
 ### CLI tools
 
@@ -15,6 +16,8 @@ IMPORTANT: When running Bash commands, always use these tools instead of their d
 | `fd` | find | fast file finder |
 | `ast-grep` | - | AST-aware search — prefer over rg when matching code patterns (function signatures, import statements, class definitions). Use rg for string literals, comments, log messages. |
 | `trash` | rm | recoverable delete — **never `rm -rf`** |
+| `jq` | python/sed/awk/scripts | JSON parsing and transformation — **never write custom scripts or commands to parse JSON**, use `jq` directly in Bash |
+| `yq` | python/sed/awk/scripts | YAML parsing and transformation — **never write custom scripts or commands to parse YAML**, use `yq` directly in Bash |
 
 ## Philosophy
 
@@ -24,6 +27,7 @@ IMPORTANT: When running Bash commands, always use these tools instead of their d
 - **Bias toward action** — For easily reversed decisions, decide and move. State your assumption so the reasoning is visible.
 - **Ask before deciding to big decisions** — YOU MUST ask before changing interfaces, data models, architecture, or running destructive/write operations on external services. This includes: schema changes, endpoint signature changes, database migrations, external API calls that mutate state, CI/CD config changes.
 - **Finish the job** — Handle edge cases you can see. Clean up what you touched. Flag adjacent breakage you notice, but don't fix things you weren't asked to fix.
+- **Scope reviews to the target directory** — When asked to review code in a specific directory, YOU MUST exhaust all exploration within that directory first (files, subdirectories, tests, configs). Do NOT search outside the directory boundary until you have thoroughly analyzed everything inside and concluded that the information within is insufficient to complete the review. Only then may you widen the scope, and state why.
 
 ## Code Quality
 
@@ -31,6 +35,8 @@ IMPORTANT: When running Bash commands, always use these tools instead of their d
 - Fail fast with clear, actionable error messages. Never swallow exceptions silently. Include context: what operation, what input, suggested fix.
 - No commented-out code — delete it.
 - When it's relevant implement unit test to cover 80% of the implementation, using mocking when testing dependencies to API.
+- Do not defer pre-existing test failures. If a test fails before your changes, fix it in a separate commit before proceeding.
+- **Never guess API or library function parameters.** Always verify signatures from documentation (context7), source code, or LSP before using them.
 
 ## Workflow
 

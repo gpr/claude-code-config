@@ -2,9 +2,14 @@
 !CLAUDE.md
 !settings.json
 !scripts/
+!scripts/**
 !CLAUDE.doc.md
 !README.md
 !agents/
+!agents/**
 !skills/
+!skills/**
 !hooks/
+!hooks/**
 !commands/
+!commands/**

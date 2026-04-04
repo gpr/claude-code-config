@@ -6,8 +6,6 @@ description: |
   "/commit", or asks to create a git commit. Handles scope selection,
   conventional commit type classification, and breaking change notation.
 argument-hint: "[files, dirs, or context...]"
-context: fork
-model: haiku
 author: Claude Code
 version: 2.0.0
 date: 2026-04-04

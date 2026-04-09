@@ -119,9 +119,10 @@
       "Read(~/Library/Application Support/**/electrum*/**)",
       "Read(~/Library/Application Support/**/exodus*/**)",
       "Read(~/Library/Application Support/**/phantom*/**)",
-      "Read(~/Library/Application Support/**/solflare*/**)"
+      "Read(~/Library/Application Support/**/solflare*/**)",
+      "Read(./.entire/metadata/**)"
     ],
-    "defaultMode": "acceptEdits",
+    "defaultMode": "plan",
     "additionalDirectories": [
       "~/.cache/"
     ]
@@ -134,13 +135,13 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(rm *)",
-            "command": "CMD=$(jq -r '.tool_input.command'); if echo \"$CMD\" | grep -qiE '(^|[[:space:]])-[a-zA-Z]*[rR]' && echo \"$CMD\" | grep -qiE '(^|[[:space:]])-[a-zA-Z]*[fF]'; then echo 'BLOCKED: Use trash instead of rm -rf' >&2; exit 2; fi"
+            "command": "CMD=$(jq -r '.tool_input.command'); if echo \"$CMD\" | grep -qiE '(^|[[:space:]])-[a-zA-Z]*[rR]' && echo \"$CMD\" | grep -qiE '(^|[[:space:]])-[a-zA-Z]*[fF]'; then echo 'BLOCKED: Use trash instead of rm -rf' >&2; exit 2; fi",
+            "if": "Bash(rm *)"
           },
           {
             "type": "command",
-            "if": "Bash(git push*)",
-            "command": "CMD=$(jq -r '.tool_input.command'); if echo \"$CMD\" | grep -qE '(main|master)'; then echo 'BLOCKED: Use feature branches' >&2; exit 2; fi"
+            "command": "CMD=$(jq -r '.tool_input.command'); if echo \"$CMD\" | grep -qE '(main|master)'; then echo 'BLOCKED: Use feature branches' >&2; exit 2; fi",
+            "if": "Bash(git push*)"
           }
         ]
       }
@@ -205,10 +206,13 @@
       "docker",
       "prek",
       "git",
-      "aws"
+      "aws",
+      "trash"
     ]
   },
+  "alwaysThinkingEnabled": false,
   "autoUpdatesChannel": "latest",
   "plansDirectory": ".claude/plans",
-  "teammateMode": "auto"
+  "teammateMode": "auto",
+  "effortLevel": "medium"
 }

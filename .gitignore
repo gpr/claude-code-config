@@ -13,3 +13,5 @@
 !hooks/**
 !commands/
 !commands/**
+**/.claude/settings.local.json
+**/.claude/plans/

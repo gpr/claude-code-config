@@ -153,11 +153,11 @@
   },
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
-    "repomix-mcp@repomix": true,
+    "repomix-mcp@repomix": false,
     "repomix-commands@repomix": true,
     "repomix-explorer@repomix": true,
     "typescript-lsp@claude-plugins-official": false,
-    "pyright-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": false,
     "gopls-lsp@claude-plugins-official": false,
     "rust-analyzer-lsp@claude-plugins-official": false,
     "clangd-lsp@claude-plugins-official": false,

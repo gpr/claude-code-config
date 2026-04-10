@@ -213,6 +213,5 @@
   "alwaysThinkingEnabled": false,
   "autoUpdatesChannel": "latest",
   "plansDirectory": ".claude/plans",
-  "teammateMode": "auto",
-  "effortLevel": "medium"
+  "teammateMode": "auto"
 }

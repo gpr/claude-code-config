@@ -142,6 +142,10 @@
             "type": "command",
             "command": "CMD=$(jq -r '.tool_input.command'); if echo \"$CMD\" | grep -qE '(main|master)'; then echo 'BLOCKED: Use feature branches' >&2; exit 2; fi",
             "if": "Bash(git push*)"
+          },
+          {
+            "type": "command",
+            "command": "val=$(jq -r '.tool_input.dangerouslyDisableSandbox // false'); if [ \"$val\" != \"true\" ]; then echo '{\"decision\":\"allow\"}'; fi"
           }
         ]
       }
@@ -193,7 +197,14 @@
       "allowedDomains": [
         "github.com",
         "*.npmjs.org",
-        "registry.yarnpkg.com"
+        "registry.yarnpkg.com",
+        "*.pypi.org",
+        "*.rubygems.org",
+        "*.gitlab.com",
+        "*.bitbucket.org",
+        "*.docker.com",
+        "*.crates.io",
+        "*.githubusercontent.com"
       ],
       "allowUnixSockets": [
         "/var/run/docker.sock",

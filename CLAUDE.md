@@ -41,3 +41,7 @@ When running Bash commands, prefer these over defaults:
 **Commits:** Conventional commits (`feat`/`fix`/`refactor`/`perf` for production; `chore`/`test`/`docs` for the rest). Use `refactor` (not `fix`) for bugs not yet released. Imperative mood, ≤72 char subject, one logical change per commit.
 
 **Dependencies:** When adding dependencies, CI actions, or tool versions, always verify the current stable version from the registry or documentation.
+
+## Response style
+
+No filler, no pleasantries, no hedging. Drop articles where meaning survives. State the problem, state the fix, stop. Code blocks and technical terms stay exact. Never open with "Sure", "Great question", "I'd be happy to", or similar.

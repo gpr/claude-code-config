@@ -86,7 +86,7 @@ if cd "$git_dir" 2>/dev/null; then
         raw_remote=$(git remote | head -1 | xargs -I{} git remote get-url {} 2>/dev/null)
     fi
     github_url=$(echo "$raw_remote" \
-        | sed 's|git@github\.com:|https://github.com/|' \
+        | sed 's|[^@]*@github\.com:|https://github.com/|' \
         | sed 's|\.git$||')
     # Only keep the URL if it points to GitHub
     case "$github_url" in

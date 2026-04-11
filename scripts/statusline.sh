@@ -11,9 +11,21 @@
 stdin_data=$(cat)
 
 # Single jq call - extract all values at once
-IFS=$'\t' read -r current_dir model_name ctx_used cache_pct five_hour_pct seven_day_pct < <(
-    echo "$stdin_data" | jq -r '[
+# Use null-delimited output to avoid IFS collapsing empty TSV fields
+{
+IFS= read -r -d '' current_dir
+IFS= read -r -d '' project_dir
+IFS= read -r -d '' model_name
+IFS= read -r -d '' ctx_used
+IFS= read -r -d '' cache_pct
+IFS= read -r -d '' five_hour_pct
+IFS= read -r -d '' seven_day_pct
+IFS= read -r -d '' five_hour_resets
+IFS= read -r -d '' worktree_branch
+} < <(
+    echo "$stdin_data" | jq -j '[
         .workspace.current_dir // "unknown",
+        .workspace.project_dir // .workspace.current_dir // "unknown",
         .model.display_name // "Unknown",
         (try (
             if (.context_window.remaining_percentage // null) != null then
@@ -33,38 +45,54 @@ IFS=$'\t' read -r current_dir model_name ctx_used cache_pct five_hour_pct seven_
             else 0 end
         ) catch 0),
         (.rate_limits.five_hour.used_percentage // ""),
-        (.rate_limits.seven_day.used_percentage // "")
-    ] | @tsv'
+        (.rate_limits.seven_day.used_percentage // ""),
+        (.rate_limits.five_hour.resets_at // ""),
+        (.worktree.original_branch // "")
+    ] | map(tostring) | join("\u0000")'
 )
 
 # Bash-level fallback: if jq crashed entirely, extract fields individually
 if [ -z "$current_dir" ] && [ -z "$model_name" ]; then
     current_dir=$(echo "$stdin_data" | jq -r '.workspace.current_dir // .cwd // "unknown"' 2>/dev/null)
+    project_dir=$(echo "$stdin_data" | jq -r '.workspace.project_dir // .workspace.current_dir // .cwd // "unknown"' 2>/dev/null)
     model_name=$(echo "$stdin_data" | jq -r '.model.display_name // "Unknown"' 2>/dev/null)
     ctx_used=""
     cache_pct="0"
     five_hour_pct=""
     seven_day_pct=""
+    five_hour_resets=""
+    worktree_branch=""
     : "${current_dir:=unknown}"
+    : "${project_dir:=$current_dir}"
     : "${model_name:=Unknown}"
 fi
 
 # Git info
-if cd "$current_dir" 2>/dev/null; then
+if cd "$project_dir" 2>/dev/null; then
     git_branch=$(git -c core.useBuiltinFSMonitor=false branch --show-current 2>/dev/null)
-    git_root=$(git -c core.useBuiltinFSMonitor=false rev-parse --show-toplevel 2>/dev/null)
+    # Try origin first, then any remote, convert SSH to HTTPS, strip .git suffix
+    raw_remote=$(git remote get-url origin 2>/dev/null)
+    if [ -z "$raw_remote" ]; then
+        raw_remote=$(git remote | head -1 | xargs -I{} git remote get-url {} 2>/dev/null)
+    fi
+    github_url=$(echo "$raw_remote" \
+        | sed 's|git@github\.com:|https://github.com/|' \
+        | sed 's|\.git$||')
+    # Only keep the URL if it points to GitHub
+    case "$github_url" in
+        https://github.com/*) ;;
+        *) github_url="" ;;
+    esac
+    github_project="${github_url#https://github.com/}"
 fi
 
-# Build repo path display (folder name only for brevity)
-if [ -n "$git_root" ]; then
-    repo_name=$(basename "$git_root")
-    if [ "$current_dir" = "$git_root" ]; then
-        folder_name="$repo_name"
-    else
-        folder_name=$(basename "$current_dir")
-    fi
+# Build folder display: project_dir, or current_dir/project_dir if different
+proj_name=$(basename "$project_dir")
+curr_name=$(basename "$current_dir")
+if [ "$current_dir" = "$project_dir" ]; then
+    folder_name="$proj_name"
 else
-    folder_name=$(basename "$current_dir")
+    folder_name="$curr_name/$proj_name"
 fi
 
 # Generate visual progress bar for context usage
@@ -106,9 +134,18 @@ short_model=$(echo "$model_name" | sed -E 's/Claude [0-9.]+ //; s/^Claude //')
 
 # LINE 1: [Model] folder | branch
 line1=$(printf '\033[37m[%s]\033[0m' "$short_model")
-line1="$line1 $(printf '\033[94m📁 %s\033[0m' "$folder_name")"
+if [ -n "$github_url" ]; then
+    # OSC 8 hyperlink: \e]8;;URL\atext\e]8;;\a
+    line1="$line1 $(printf '%b' "\033[94m🐙 \e]8;;${github_url}\a${github_project}\e]8;;\a 📁 \e]8;;vscode://file${project_dir}\a\033[2m${folder_name}\e]8;;\a\033[0m")"
+else
+    line1="$line1 $(printf '%b' "\033[94m📁 \e]8;;vscode://file${project_dir}\a${folder_name}\e]8;;\a\033[0m")"
+fi
 if [ -n "$git_branch" ]; then
-    line1="$line1 $(printf '%b \033[96m🌿 %s\033[0m' "$SEP" "$git_branch")"
+    if [ -n "$worktree_branch" ]; then
+        line1="$line1 $(printf '%b \033[96m🌿 %s \033[2m⤴ %s\033[0m' "$SEP" "$git_branch" "$worktree_branch")"
+    else
+        line1="$line1 $(printf '%b \033[96m🌿 %s\033[0m' "$SEP" "$git_branch")"
+    fi
 fi
 
 # LINE 2: Progress bar | Context % | rate limits | cache hit %
@@ -140,6 +177,15 @@ if [ -n "$seven_day_pct" ]; then
         line2=$(printf '\033[35m7d:%s%%\033[0m' "$week_int")
     fi
 fi
+# Format 5-hour reset time (resets_at is Unix epoch seconds)
+reset_display=""
+if [ -n "$five_hour_resets" ]; then
+    reset_display=$(date -r "$five_hour_resets" "+%l%p %Z" 2>/dev/null \
+        | sed 's/AM/am/;s/PM/pm/' | sed 's/^ //')
+fi
+if [ -n "$reset_display" ]; then
+    line2="$line2 $(printf '\033[2m(%s)\033[0m' "$reset_display")"
+fi
 if [ "$cache_pct" -gt 0 ] 2>/dev/null; then
     if [ -n "$line2" ]; then
         line2="$line2 $(printf '%b \033[2m↻%s%%\033[0m' "$SEP" "$cache_pct")"
@@ -148,4 +194,17 @@ if [ "$cache_pct" -gt 0 ] 2>/dev/null; then
     fi
 fi
 
-printf '%b\n\n%b' "$line1" "$line2"
+# LINE 3: Added directories with vscode:// links (only when present)
+line3=""
+while IFS= read -r dir_path; do
+    [ -z "$dir_path" ] && continue
+    dir_name="${dir_path##*/}"
+    [ -n "$line3" ] && line3="$line3 "
+    line3="${line3}$(printf '%b' "\033[94m📁 \e]8;;vscode://file${dir_path}\a${dir_name}\e]8;;\a\033[0m")"
+done < <(echo "$stdin_data" | jq -r '.workspace.added_dirs // [] | .[]')
+
+if [ -n "$line3" ]; then
+    printf '%b\n\n%b\n\n%b' "$line1" "$line2" "$line3"
+else
+    printf '%b\n\n%b' "$line1" "$line2"
+fi

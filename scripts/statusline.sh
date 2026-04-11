@@ -22,6 +22,7 @@ IFS= read -r -d '' five_hour_pct
 IFS= read -r -d '' seven_day_pct
 IFS= read -r -d '' five_hour_resets
 IFS= read -r -d '' worktree_branch
+IFS= read -r -d '' worktree_original_cwd
 } < <(
     echo "$stdin_data" | jq -j '[
         .workspace.current_dir // "unknown",
@@ -47,7 +48,8 @@ IFS= read -r -d '' worktree_branch
         (.rate_limits.five_hour.used_percentage // ""),
         (.rate_limits.seven_day.used_percentage // ""),
         (.rate_limits.five_hour.resets_at // ""),
-        (.worktree.original_branch // "")
+        (.worktree.original_branch // ""),
+        (.worktree.original_cwd // "")
     ] | map(tostring) | join("\u0000")'
 )
 
@@ -62,13 +64,21 @@ if [ -z "$current_dir" ] && [ -z "$model_name" ]; then
     seven_day_pct=""
     five_hour_resets=""
     worktree_branch=""
+    worktree_original_cwd=""
     : "${current_dir:=unknown}"
     : "${project_dir:=$current_dir}"
     : "${model_name:=Unknown}"
 fi
 
-# Git info
-if cd "$project_dir" 2>/dev/null; then
+# In worktree mode, use the original project directory for git info and display
+if [ -n "$worktree_original_cwd" ]; then
+    git_dir="$worktree_original_cwd"
+else
+    git_dir="$project_dir"
+fi
+
+# Git info (use original project dir in worktree mode to get correct remote)
+if cd "$git_dir" 2>/dev/null; then
     git_branch=$(git -c core.useBuiltinFSMonitor=false branch --show-current 2>/dev/null)
     # Try origin first, then any remote, convert SSH to HTTPS, strip .git suffix
     raw_remote=$(git remote get-url origin 2>/dev/null)
@@ -86,8 +96,17 @@ if cd "$project_dir" 2>/dev/null; then
     github_project="${github_url#https://github.com/}"
 fi
 
-# Build folder display: project_dir, or current_dir/project_dir if different
-proj_name=$(basename "$project_dir")
+# In worktree mode, show the worktree branch (from project_dir) not original branch
+if [ -n "$worktree_original_cwd" ]; then
+    git_branch=$(cd "$project_dir" 2>/dev/null && git -c core.useBuiltinFSMonitor=false branch --show-current 2>/dev/null)
+fi
+
+# Build folder display: use original project name in worktree mode
+if [ -n "$worktree_original_cwd" ]; then
+    proj_name=$(basename "$worktree_original_cwd")
+else
+    proj_name=$(basename "$project_dir")
+fi
 curr_name=$(basename "$current_dir")
 if [ "$current_dir" = "$project_dir" ]; then
     folder_name="$proj_name"

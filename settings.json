@@ -122,10 +122,7 @@
       "Read(~/Library/Application Support/**/solflare*/**)",
       "Read(./.entire/metadata/**)"
     ],
-    "defaultMode": "plan",
-    "additionalDirectories": [
-      "~/.cache/"
-    ]
+    "defaultMode": "plan"
   },
   "enableAllProjectMcpServers": false,
   "hooks": {

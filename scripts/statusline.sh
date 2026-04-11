@@ -78,8 +78,12 @@ else
 fi
 
 # Git info (use original project dir in worktree mode to get correct remote)
+git_staged=0
+git_modified=0
 if cd "$git_dir" 2>/dev/null; then
     git_branch=$(git -c core.useBuiltinFSMonitor=false branch --show-current 2>/dev/null)
+    git_staged=$(git diff --cached --numstat 2>/dev/null | wc -l | tr -d ' ')
+    git_modified=$(git diff --numstat 2>/dev/null | wc -l | tr -d ' ')
     # Try origin first, then any remote, convert SSH to HTTPS, strip .git suffix
     raw_remote=$(git remote get-url origin 2>/dev/null)
     if [ -z "$raw_remote" ]; then
@@ -160,10 +164,13 @@ else
     line1="$line1 $(printf '%b' "\033[94m📁 \e]8;;vscode://file${project_dir}\a${folder_name}\e]8;;\a\033[0m")"
 fi
 if [ -n "$git_branch" ]; then
+    git_diff_stats=""
+    [ "$git_staged" -gt 0 ] && git_diff_stats="$(printf '\033[32m+%s\033[0m' "$git_staged")"
+    [ "$git_modified" -gt 0 ] && git_diff_stats="${git_diff_stats}$(printf '\033[33m~%s\033[0m' "$git_modified")"
     if [ -n "$worktree_branch" ]; then
-        line1="$line1 $(printf '%b \033[96m🌿 %s \033[2m⤴ %s\033[0m' "$SEP" "$git_branch" "$worktree_branch")"
+        line1="$line1 $(printf '%b \033[96m🌿 %s\033[0m%b \033[2m⤴ %s\033[0m' "$SEP" "$git_branch" "${git_diff_stats:+ $git_diff_stats}" "$worktree_branch")"
     else
-        line1="$line1 $(printf '%b \033[96m🌿 %s\033[0m' "$SEP" "$git_branch")"
+        line1="$line1 $(printf '%b \033[96m🌿 %s\033[0m%b' "$SEP" "$git_branch" "${git_diff_stats:+ $git_diff_stats}")"
     fi
 fi
 

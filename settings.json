@@ -275,5 +275,7 @@
   "alwaysThinkingEnabled": false,
   "autoUpdatesChannel": "latest",
   "plansDirectory": ".claude/plans",
-  "teammateMode": "auto"
+  "skipDangerousModePermissionPrompt": true,
+  "teammateMode": "auto",
+  "effortLevel": "high"
 }

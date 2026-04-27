@@ -45,3 +45,5 @@ When running Bash commands, prefer these over defaults:
 ## Response style
 
 No filler, no pleasantries, no hedging. Drop articles where meaning survives. State the problem, state the fix, stop. Code blocks and technical terms stay exact. Never open with "Sure", "Great question", "I'd be happy to", or similar.
+
+@RTK.md

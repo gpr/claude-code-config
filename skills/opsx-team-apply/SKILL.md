@@ -12,12 +12,11 @@ description: |
   "/opsx-team-apply <name>", or asks for a multi-agent / team-based
   opsx workflow on a specific in-flight change. Do not use for the
   proposal phase (see opsx-team-propose).
-argument-hint: "<change-name, or empty to auto-detect>"
+argument-hint: "[change-name]"
 model: claude-opus-4-7
-thinking:
-  effort: medium
+effort: high
 author: gregory.rome@teads.com
-version: 1.3.0
+version: 1.5.0
 date: 2026-05-21
 ---
 
@@ -40,9 +39,9 @@ Each teammate commits its own work. The lead and the reviewer never edit product
 directly; the lead only runs `/opsx:sync`, `/opsx:archive`, and the final
 archive commit.
 
-## The single rule that prevents the worst failure mode
+## The rule that prevents the worst failure mode
 
-**Before any SendMessage claiming a teammate's code is broken, reproduce the failure yourself against `HEAD`.** System-injected diagnostics (`<new-diagnostics>` reminders, cached pyright/test output) can lag the working tree by minutes. If you paste a stale diagnostic into a fix demand, you will pressure a teammate to commit fictional changes. Cost of the check: ~5 seconds. Cost of skipping it: an eroded teammate, a polluted commit history, and a user escalation that didn't need to happen. This rule is enforced in Step 1c below.
+Before sending any teammate a message claiming their code is broken, reproduce the failure against `HEAD` yourself. See **Step 1c — Verify-before-demand protocol** for the exact procedure. System diagnostics lag the working tree by minutes; pasting a stale diagnostic into a fix demand pressures teammates into committing fictional changes.
 
 ## Arguments
 
@@ -58,17 +57,11 @@ If `$ARGUMENTS` is empty:
 If the named directory does not exist, stop and use `AskUserQuestion` to ask the user — do not
 spawn a team for a phantom change.
 
-## Context
-
-Current git status: !`git status --short`
-Current branch: !`git branch --show-current`
-
 ## Preflight
 
 Before creating the team:
 
-- Confirm the working tree is clean enough to start (no uncommitted
-  changes that aren't part of the change). If dirty, ask the user.
+- As your first action, run `git status --short` and `git branch --show-current` in a single Bash call. Confirm the working tree is clean enough to start (no uncommitted changes that aren't part of the change). If dirty, ask the user.
 - Re-read the change's `proposal.md`, `design.md`, and `tasks.md` so you
   can brief each teammate accurately. Teammates start with no context
   from this session — every message you send must be self-contained.
@@ -85,14 +78,18 @@ Create the team and spawn teammates in a single coordinated setup pass:
    - `team_name: opsx-apply-<change>`
    - `description: "Implement OpenSpec change <change> via lead/implementer/reviewer/verifier"`
 2. Spawn four teammates via the `Agent` tool, each with `team_name` set
-   to the team above and `name` set as below. Pass `model: claude-opus-4-7`
-   to all teammates; the `thinking.effort` levels below are tuned per
-   role. Every initial briefing MUST end with the **Communication rules
-   block** in the next subsection.
-   - `implementer` — `subagent_type: general-purpose`, `thinking.effort: medium`. Brief with: the change name, where its artifacts live, and the communication rules block.
-   - `tester` — `subagent_type: general-purpose`, `thinking.effort: medium`. Brief with: the change name, where its artifacts live, and the communication rules block.
-   - `reviewer` — `subagent_type: pr-review-toolkit:code-reviewer`, `thinking.effort: high`. Brief with: the change name, a pointer to its artifacts, instruction to wait for the lead's review request with the commit SHA, and the communication rules block.
-   - `verifier` — `subagent_type: general-purpose`, `thinking.effort: medium`. Brief with: the change name, a pointer to its artifacts, instruction to wait for the lead's verification request, and the communication rules block.
+   to the team above and `name` set as below. Models are tuned per
+   role: Sonnet for execution-heavy workers, Opus for the
+   judgment-heavy reviewer. The `Agent` tool has no `effort` parameter
+   — for the reviewer, embed "think carefully" instructions in the
+   briefing instead. Every initial briefing MUST end with the
+   **Communication rules block** in the next subsection.
+   - `implementer` — `subagent_type: general-purpose`, `model: claude-sonnet-4-6`. Brief with: the change name, where its artifacts live, and the communication rules block.
+   - `tester` — `subagent_type: general-purpose`, `model: claude-sonnet-4-6`. Brief with: the change name, where its artifacts live, and the communication rules block.
+   - `reviewer` — `subagent_type: general-purpose`, `model: claude-opus-4-7`. Brief with: the change name, a pointer to its artifacts, instruction to wait for the lead's review request with the commit SHA, an explicit "think carefully about spec divergence and edge cases before replying", and the communication rules block.
+   - `verifier` — `subagent_type: general-purpose`, `model: claude-sonnet-4-6`. Brief with: the change name, a pointer to its artifacts, instruction to wait for the lead's verification request, and the communication rules block.
+
+If the project's `CLAUDE.md` documents a more specialized `subagent_type` for any of these roles (for example a dedicated code-reviewer subagent), use it for that role instead of `general-purpose`. Otherwise `general-purpose` is the safe default — it is always present in Claude Code.
 
 Spawn the four teammates in parallel (single message, multiple Agent
 tool calls). Each will immediately go idle after acknowledging — that
@@ -104,17 +101,13 @@ is normal, not an error.
 Communication rules:
 - All replies to the lead MUST go through the SendMessage tool. Plain-text output is invisible to the lead and will be lost.
 - After each turn you will automatically go idle. That is normal and does not indicate completion or failure.
-- You may receive nag-style follow-ups if your reply crosses with a lead message. Reply once with the latest authoritative state; do not re-do work that already landed.
 - If a lead message claims your code is broken: before "fixing" anything, paste raw evidence (git rev-parse HEAD, the exact tool output, the relevant file lines) and ask the lead to verify against the same SHA. Refusing to commit fictional changes is correct behavior — you will not be penalized for it.
-- All commits MUST follow the project's conventional-commit rules. Use the project's commit skill if one exists.
+- All commits MUST follow the commit conventions documented in the project's `CLAUDE.md`. If `CLAUDE.md` directs you to a specific commit skill, use it; otherwise commit directly.
 ```
 
-## Workflow
+Execute the workflow steps below in order. Use `SendMessage` to dispatch work and read teammate replies as they arrive.
 
-Execute the steps in order. Use `SendMessage` to dispatch work and read
-teammate replies as they arrive.
-
-### Task tracking — per deliverable, not per step
+## Task tracking — per deliverable, not per step
 
 Use `TaskCreate`/`TaskUpdate` to track each **concrete deliverable**, not each workflow step. Workflow steps include loops; tasks don't loop cleanly. Create tasks like:
 
@@ -128,7 +121,7 @@ Use `TaskCreate`/`TaskUpdate` to track each **concrete deliverable**, not each w
 
 Loop iterations get fresh task IDs (`verifier pass 2 report`, `implementer Commit F`, ...). Update task status the moment each deliverable lands, not at end-of-step.
 
-### Wait-for-reply protocol
+## Wait-for-reply protocol
 
 For every step that says "Wait for ... reply":
 
@@ -143,7 +136,7 @@ For every step that says "Wait for ... reply":
 - If a response is incomplete, send one correction message with a checklist of missing items.
 - If still incomplete after that correction, call `AskUserQuestion` with the same status details.
 
-### Step 1a — Implement and test (parallel)
+## Step 1a — Implement and test (parallel)
 
 Dispatch `implementer` and `tester` in parallel (single message, two `SendMessage` calls).
 
@@ -160,14 +153,14 @@ Message `tester`:
 > Parallel-dispatch rules:
 > 1. Write tests against the **documented signatures** in `proposal.md` / `design.md` / `specs/`, not against what currently exists in the source file (which is in flight).
 > 2. If a test would require a not-yet-existing symbol, skip/defer it and note it in your report.
-> 3. Run the project's type-checker (e.g. `pyright`) before each commit. Test fixtures often fight `**dict` narrowing — build a typed factory helper rather than disabling rules.
+> 3. Run the project's type-checker (e.g. `pyright`, `tsc --noEmit`, `go vet`) before each commit. If type narrowing fights your fixtures, build a typed factory helper rather than disabling rules.
 > 4. Do not touch production code; the implementer owns `src/` (or the equivalent production lane).
 >
 > When tests are written, create one conventional commit scoped to the area you touched. Report the commit SHA, file list, and a one-line summary.
 
 Wait for the implementer and tester replies. Capture the commit SHAs and file list.
 
-### Step 1b — Run tests and fix failures
+## Step 1b — Run tests and fix failures
 
 Once both have replied, message `implementer`:
 
@@ -175,14 +168,14 @@ Once both have replied, message `implementer`:
 > If any fail, fix them and commit the fixes (use `refactor` for unreleased code).
 > Report back the new commit SHA and a one-line summary of the fixes.
 
-### Step 1c — Verify-before-demand protocol
+## Step 1c — Verify-before-demand protocol
 
 Before sending any SendMessage that asserts a teammate's code is broken or tests are failing, the lead MUST reproduce the failure locally against the current `HEAD`:
 
 ```bash
-git rev-parse HEAD                  # record SHA you actually observed
-uv run pyright <file>               # or the project's type-checker
-uv run pytest <relevant tests> -q   # or the project's test runner
+git rev-parse HEAD                                                 # record SHA you actually observed
+<project-type-checker> <file>                                      # e.g. uv run pyright, tsc --noEmit, go vet
+<project-test-runner> <relevant tests> -q                          # e.g. uv run pytest, npm test, cargo test
 ```
 
 Decision rules:
@@ -194,7 +187,7 @@ Decision rules:
 
 When a teammate pushes back with raw evidence (HEAD SHA, command output), stop and re-verify. Refusing to commit fictional changes is correct teammate behavior.
 
-### Step 2 — Review
+## Step 2 — Review
 
 Message `reviewer`:
 
@@ -209,7 +202,7 @@ Message `reviewer`:
 
 Wait for the reviewer's reply. Keep the full review verbatim.
 
-### Step 3 — Implementer triages the review
+## Step 3 — Implementer triages the review
 
 Forward the full review to `implementer`:
 
@@ -221,7 +214,7 @@ Forward the full review to `implementer`:
 
 Wait for the implementer's triage.
 
-### Step 4 — Lead synthesis
+## Step 4 — Lead synthesis
 
 Read the review + the implementer's triage side by side. Produce a final action list:
 
@@ -234,7 +227,7 @@ If the action list is empty (no edits needed), skip Step 5 and proceed
 directly to Step 6 — there is nothing to verify-after-fix, but the
 verifier still runs against the original commit.
 
-### Step 5 — Apply modifications
+## Step 5 — Apply modifications
 
 Message `implementer` with the final action list:
 
@@ -246,19 +239,21 @@ Message `implementer` with the final action list:
 
 Wait for confirmation.
 
-### Step 5b — Slow-gate self-check (precondition for Step 6)
+## Step 5b — Slow-gate self-check (precondition for Step 6)
 
-Before dispatching the verifier, the lead MUST execute every `@pytest.mark.slow` (or equivalently gated) test added by the change and confirm `PASSED` (not `SKIPPED`):
+Before dispatching the verifier, the lead MUST execute every gated/slow test added by the change and confirm `PASSED` (not `SKIPPED`). Use the project's slow-test gate — for example:
 
 ```bash
-uv run pytest -m slow <new-test-files> -v
+uv run pytest -m slow <new-test-files> -v   # Python (@pytest.mark.slow)
+# or: cargo test --test '*' -- --ignored    # Rust
+# or: npm test -- --runInBand --testPathPattern=...  # Node
 ```
 
 If any gate **skips**, treat as Step 5 incomplete: the fixture is likely too small or empty. Message the tester to fix the fixture or remove the silent-skip path, then re-check. Do not advance to Step 6 with silent skips — the verifier will flag the same risk on its next pass anyway.
 
 Also confirm `git status` is clean (all teammate work committed) and the project's type-checker + linter are clean on touched files.
 
-### Step 6 — Verify
+## Step 6 — Verify
 
 Message `verifier`:
 
@@ -269,7 +264,7 @@ Message `verifier`:
 
 Wait for the verifier's report.
 
-### Step 7 — Decide and fix verifier issues
+## Step 7 — Decide and fix verifier issues
 
 For each issue from Step 6, classify:
 
@@ -287,14 +282,14 @@ fails after the third pass, stop and ask the user — repeated failure
 usually means the change's scope is wrong, not that one more tweak
 will fix it.
 
-### Step 8 — Sync, archive, and final commit
+## Step 8 — Sync, archive, and final commit
 
 The lead performs these steps directly (do not delegate):
 
 1. Run `/opsx:sync <change>`.
 2. Run `/opsx:archive <change>`.
 3. Stage everything that changed in steps 1 and 2 of this section.
-4. Commit using the project's commit conventions.
+4. Commit following the conventions documented in the project's `CLAUDE.md`. If `CLAUDE.md` names a specific commit skill, invoke it; otherwise commit directly with a conventional-commit message.
 
 ## Teardown
 
@@ -306,12 +301,10 @@ on disk for traceability.
 ## Guardrails
 
 - **Never** `git push`. It belongs to the user.
-- **Never** paste a `<new-diagnostics>` system-reminder verbatim into a teammate message. Reproduce against `HEAD` first (see Step 1c).
-- **Never** threaten reassignment in the same message as a technical claim.
-- When a teammate pushes back with raw evidence, stop and re-verify before insisting. Reward that behavior — do not steamroll it.
+- **Never** paste a `<new-diagnostics>` system-reminder verbatim into a teammate message; never threaten reassignment in the same message as a technical claim; when a teammate pushes back with raw evidence, stop and re-verify before insisting. See Step 1c.
 - If the implementer reports merge conflicts, destructive operations, or anything requiring `--force`, stop and ask the user — do not authorize teammates to bypass safety checks.
 - Every agent commits its own work. Do not collapse to a single end-of-run commit — the per-step commit history is the audit trail the user explicitly asked for.
 - Refer to teammates by name in `SendMessage` (`implementer`, not the agent UUID). Idle notifications between turns are normal — do not treat them as failures (see the Wait-for-reply protocol).
 - Convert any relative dates you encounter ("Thursday", "next week") to absolute ISO dates before writing them into artifacts.
 - If `openspec` CLI is missing at any point, stop and tell the user to install it according to project instructions.
-- When committing, use project instructions and the appropriate commit skill if available.
+- When committing, follow the conventions in the project's `CLAUDE.md`. If it names a commit skill, invoke it; otherwise commit directly.

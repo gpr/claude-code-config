@@ -27,6 +27,7 @@ IFS= read -r -d '' total_tokens
 IFS= read -r -d '' total_cost
 IFS= read -r -d '' effort_level
 IFS= read -r -d '' thinking_enabled
+IFS= read -r -d '' git_worktree_name
 } < <(
     echo "$stdin_data" | jq -j '[
         .workspace.current_dir // "unknown",
@@ -60,7 +61,8 @@ IFS= read -r -d '' thinking_enabled
         ) catch 0),
         (.cost.total_cost_usd // ""),
         (.effort.level // ""),
-        (if (.thinking? // null) != null and (.thinking | has("enabled")) then .thinking.enabled else "" end)
+        (if (.thinking? // null) != null and (.thinking | has("enabled")) then .thinking.enabled else "" end),
+        (.workspace.git_worktree // "")
     ] | map(tostring) | join("\u0000")'
 )
 
@@ -95,23 +97,33 @@ if [ -z "$current_dir" ] && [ -z "$model_name" ]; then
     total_cost=""
     effort_level=""
     thinking_enabled=""
+    git_worktree_name=""
     enterprise_tok_pct=""
     : "${current_dir:=unknown}"
     : "${project_dir:=$current_dir}"
     : "${model_name:=Unknown}"
 fi
 
-# In worktree mode, use the original project directory for git info and display
+# Determine starting directory for git commands.
+# Priority: Claude --worktree session original cwd > project_dir
 if [ -n "$worktree_original_cwd" ]; then
     git_dir="$worktree_original_cwd"
 else
     git_dir="$project_dir"
 fi
 
-# Git info (use original project dir in worktree mode to get correct remote)
+# Git info — run from git_dir, then resolve the real repo root so that
+# git linked worktrees (workspace.git_worktree set, .git is a file not a dir)
+# work identically to normal checkouts.
+git_branch=""
 git_staged=0
 git_modified=0
+github_url=""
+github_project=""
+git_repo_root=""
 if cd "$git_dir" 2>/dev/null; then
+    # Resolve true repo root (handles both .git dirs and .git files used by worktrees)
+    git_repo_root=$(git -c core.useBuiltinFSMonitor=false rev-parse --show-toplevel 2>/dev/null)
     git_branch=$(git -c core.useBuiltinFSMonitor=false branch --show-current 2>/dev/null)
     git_staged=$(git diff --cached --numstat 2>/dev/null | wc -l | tr -d ' ')
     git_modified=$(git diff --numstat 2>/dev/null | wc -l | tr -d ' ')
@@ -131,19 +143,24 @@ if cd "$git_dir" 2>/dev/null; then
     github_project="${github_url#https://github.com/}"
 fi
 
-# In worktree mode, show the worktree branch (from project_dir) not original branch
+# In Claude --worktree sessions, show the worktree branch (from project_dir).
 if [ -n "$worktree_original_cwd" ]; then
     git_branch=$(cd "$project_dir" 2>/dev/null && git -c core.useBuiltinFSMonitor=false branch --show-current 2>/dev/null)
 fi
 
-# Build folder display: use original project name in worktree mode
+# Build folder display.
+# Use the real repo root name when available (handles git worktrees where
+# project_dir is a worktree subdirectory like .claude/worktrees/<name>).
+# Fall back chain: git_repo_root > worktree_original_cwd > project_dir
 if [ -n "$worktree_original_cwd" ]; then
     proj_name=$(basename "$worktree_original_cwd")
+elif [ -n "$git_repo_root" ]; then
+    proj_name=$(basename "$git_repo_root")
 else
     proj_name=$(basename "$project_dir")
 fi
 curr_name=$(basename "$current_dir")
-if [ "$current_dir" = "$project_dir" ]; then
+if [ "$current_dir" = "$project_dir" ] || [ "$current_dir" = "$git_repo_root" ]; then
     folder_name="$proj_name"
 else
     folder_name="$curr_name/$proj_name"
@@ -196,7 +213,16 @@ esac
 # Effort badge (only when present)
 effort_badge=""
 if [ -n "$effort_level" ]; then
-    effort_badge=$(printf ' \033[2m%s\033[0m' "$effort_level")
+    effort_cap="$(echo "$effort_level" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
+    case "$effort_level" in
+        low)    effort_glyph="○" ;;
+        medium) effort_glyph="◐" ;;
+        high)   effort_glyph="●" ;;
+        xhigh)  effort_glyph="◉" ;;
+        ultra)  effort_glyph="◎" ;;
+        *)      effort_glyph="◌" ;;
+    esac
+    effort_badge=$(printf ' %s %s' "$effort_glyph" "$effort_cap")
 fi
 
 # LINE 1: [Model] [thinking] [effort] folder | branch

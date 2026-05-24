@@ -1,29 +1,38 @@
 ---
 name: opsx-team-propose
 description: |
-  Drive the front end of an OpenSpec change end-to-end with a coordinated
-  team: a lead (you) and two independent reviewers. The lead runs
-  `/opsx:explore` on the user's idea, then `/opsx:ff` to fast-forward into
-  a concrete proposal and commits. Two reviewers — reviewer-scope (scope,
-  clarity, acceptance criteria) and reviewer-tech (feasibility, edge
-  cases, test strategy) — review the proposal autonomously and in
-  parallel. The lead then forwards each review to the other reviewer for
-  AGREE/DISAGREE/ADD-ON discussion, synthesizes a single action list,
-  asks the user via AskUserQuestion only on strong disagreement,
-  edits the proposal artifacts directly, and commits. Use whenever the
-  user says "propose a change with a team", "team-propose <idea>",
-  "explore and propose with reviewers", "/opsx-team-propose <idea>",
-  "team-explore this idea", or asks for a multi-agent / team-based
-  OpenSpec proposal workflow. The output is a reviewed change directory
-  under `openspec/changes/<slug>/` ready to be picked up by
-  `/opsx-team-apply`.
+  Drive the front end of an OpenSpec change end-to-end with a lead +
+  two-reviewer team. Lead runs `/opsx:explore` then `/opsx:ff`,
+  commits the draft, dispatches parallel scope and technical reviews,
+  arbitrates disagreements, edits the proposal, and commits.
+when_to_use: |
+  Use whenever the user says "propose a change with a team",
+  "team-propose <idea>", "explore and propose with reviewers",
+  "/opsx-team-propose <idea>", "team-explore this idea", or asks for
+  a multi-agent / team-based OpenSpec proposal workflow. Output is a
+  reviewed change directory under `openspec/changes/<slug>/` ready
+  for `/opsx-team-apply`.
 argument-hint: "<short idea or change slug, or empty to ask>"
 model: claude-opus-4-7
-thinking:
-  effort: high
+effort: high
+disable-model-invocation: true
+allowed-tools:
+  - Agent
+  - SendMessage
+  - TeamCreate
+  - TaskCreate
+  - TaskUpdate
+  - AskUserQuestion
+  - Edit
+  - Write
+  - Read
+  - Bash(git status:*)
+  - Bash(git log:*)
+  - Bash(git branch:*)
+  - Bash(openspec *)
 author: gregory.rome@teads.com
-version: 1.0.0
-date: 2026-05-21
+version: 1.1.0
+date: 2026-05-23
 ---
 
 ## Purpose
@@ -65,9 +74,13 @@ In-flight changes: !`openspec list || echo "openspec is missing, stopping here"`
 
 Before creating the team:
 
-- If the working tree has uncommitted changes unrelated to a new
-  OpenSpec proposal, stop and ask the user via `AskUserQuestion`. Do
-  not auto-stash.
+- **Agent teams are experimental.** If
+  `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is not set in settings,
+  stop and tell the user to enable it before retrying. Without it,
+  `TeamCreate` will fail.
+- If `git status --short` shows any file outside `openspec/changes/`,
+  the working tree has unrelated uncommitted changes — stop and ask
+  the user via `AskUserQuestion`. Do not auto-stash.
 - If `openspec` CLI is missing, stop and tell the user to run
   `mise install`.
 - Resolve a working **slug**: derive a kebab-case slug from the idea,
@@ -84,18 +97,23 @@ Create the team and spawn both reviewers in a single coordinated pass:
    - `description: "Propose OpenSpec change <slug> via lead + two-reviewer discussion"`
 2. Spawn two reviewers via the `Agent` tool in **parallel** (single
    message, two tool calls), each with `team_name` set to the team
-   above and `name` set as below:
-   - `reviewer-scope` — `subagent_type: pr-review-toolkit:code-reviewer`.
-     Initial briefing: the idea, the target slug, that artifacts will
-     appear under `openspec/changes/<slug>/`, and that they should wait
-     for the lead's review request which will include a commit SHA.
-     State their lens explicitly: scope boundaries, clarity of intent,
-     acceptance criteria completeness, requirement unambiguity,
-     alignment with stated intent.
-   - `reviewer-tech` — `subagent_type: pr-review-toolkit:code-reviewer`.
-     Same briefing structure. State their lens explicitly: technical
+   above, `name` set as below, `subagent_type: general-purpose`, and
+   `model: sonnet`. The neutral `general-purpose` system prompt is
+   intentional — the lens is set entirely by the spawn briefing so
+   the agent's default prompt doesn't bias the review (e.g. a
+   code-reviewer agent would push the review toward diff/style
+   framing, which is the wrong frame for design-doc artifacts).
+   - `reviewer-scope` briefing: the idea, the target slug, artifacts
+     will appear under `openspec/changes/<slug>/`, wait for the
+     lead's review request which will include a commit SHA. Lens:
+     **scope boundaries, clarity of intent, acceptance criteria
+     completeness, requirement unambiguity, alignment with stated
+     intent**. *"Apply medium reasoning effort — this is structured
+     doc review, not open-ended investigation. Reviewers never edit
+     anything; return text only."*
+   - `reviewer-tech` briefing: same structure. Lens: **technical
      feasibility, edge cases, test strategy, dependencies, risk,
-     alternatives considered.
+     alternatives considered**. Same effort + no-edit guidance.
 
 Each reviewer will acknowledge and go idle. Idle notifications between
 turns are normal — do not treat them as failures.
@@ -108,9 +126,13 @@ list so progress is visible.
 
 For every step that says "Wait for ... reply":
 
-- If no response in 3 minutes, retry once with a shorter request that
-  lists required outputs.
-- If still no response after 2 additional minutes, call
+Teammate replies arrive automatically as idle notifications — you do
+not need to poll. The timeouts below are a **safety net** for stuck
+teammates, not an active polling cadence.
+
+- If no notification has arrived after ~3 minutes wall-clock, retry
+  once with a shorter request that lists required outputs.
+- If still nothing after ~2 additional minutes, call
   `AskUserQuestion` with: teammate name, requested task, retries
   attempted, current blocker, and two concrete options.
 - If a response is incomplete, send one correction message with a
@@ -204,8 +226,7 @@ After edits, validate the proposal is still well-formed:
 openspec validate <slug>
 ```
 
-(or whatever validation `/opsx:ff` documents). If validation fails,
-fix and re-run before committing.
+If validation fails, fix and re-run before committing.
 
 Then run `/commit`. Default subject: `chore(openspec): refine <slug> proposal`.
 Body: bullet list of applied items, plus any deferred items with the
@@ -220,10 +241,18 @@ for `/opsx-team-apply <slug>`.
 
 ## Teardown
 
-Send `shutdown_request` to `reviewer-scope` and `reviewer-tech` via
-`SendMessage`. The team file under
-`~/.claude/teams/opsx-propose-<slug>/` and its task list remain on disk
-for traceability.
+1. Ask each reviewer to shut down via `SendMessage` — a
+   natural-language request (e.g. *"Please shut down, your review
+   work is complete."*), not a literal `shutdown_request` payload.
+   Each reviewer may accept or reject; if rejected, surface the
+   reason to the user and stop.
+2. Once both reviewers have shut down, ask the user via
+   `AskUserQuestion` whether to clean up the team. On confirmation,
+   run the team cleanup (per the
+   [agent-teams docs](https://code.claude.com/docs/en/agent-teams.md#clean-up-the-team)).
+   This removes `~/.claude/teams/opsx-propose-<slug>/`.
+3. If the user prefers to keep the team for traceability, skip
+   cleanup — the team config and task list remain on disk.
 
 ## Guardrails
 

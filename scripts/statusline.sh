@@ -225,6 +225,30 @@ if [ -n "$effort_level" ]; then
     effort_badge=$(printf ' %s %s' "$effort_glyph" "$effort_cap")
 fi
 
+# Auth / login info
+# Priority: ANTHROPIC_BASE_URL (custom endpoint) > ANTHROPIC_API_KEY (API key) > logged-in account
+auth_badge=""
+if [ -n "$ANTHROPIC_BASE_URL" ]; then
+    # Extract hostname from the URL (strip scheme and path)
+    base_host=$(echo "$ANTHROPIC_BASE_URL" | sed -E 's|^https?://([^/]+).*|\1|')
+    auth_badge=$(printf '\033[2m🔗 %s\033[0m' "$base_host")
+elif [ -n "$ANTHROPIC_API_KEY" ]; then
+    auth_badge=$(printf '\033[2mAPI key\033[0m')
+else
+    # Try to read logged-in account email from Claude Code's config
+    _auth_email=""
+    for _f in "$HOME/.claude.json" "$HOME/.claude/config.json" "$HOME/.claude/.config.json"; do
+        if [ -f "$_f" ]; then
+            _auth_email=$(jq -r '.oauthAccount.emailAddress // .accountEmail // .email // empty' "$_f" 2>/dev/null)
+            [ -n "$_auth_email" ] && break
+        fi
+    done
+    if [ -n "$_auth_email" ]; then
+        auth_badge=$(printf '\033[2m👤 %s\033[0m' "$_auth_email")
+    fi
+    unset _f _auth_email
+fi
+
 # LINE 1: [Model] [thinking] [effort] folder | branch
 line1=$(printf '\033[37m[%s]\033[0m' "$short_model")
 if [ -n "$thinking_icon" ]; then
@@ -232,6 +256,9 @@ if [ -n "$thinking_icon" ]; then
 fi
 if [ -n "$effort_badge" ]; then
     line1="${line1}$(printf '%b' "$effort_badge")"
+fi
+if [ -n "$auth_badge" ]; then
+    line1="$line1 $(printf '%b %b' "$SEP" "$auth_badge")"
 fi
 if [ -n "$github_url" ]; then
     # OSC 8 hyperlink: \e]8;;URL\atext\e]8;;\a

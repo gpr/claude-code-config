@@ -2,9 +2,9 @@
 
 ## Tools
 
-- Use `plugin:repomix-mcp:repomix` MCP tools when you need a broad understanding of project structure, cross-cutting concerns, or multi-module relationships. For targeted searches (specific function, single file, known path), use built-in Read/Grep/Glob.
-- Use `plugin:context7:context7` MCP tools for library documentation when the API is unfamiliar, recently changed, or version-sensitive. Skip for stable, well-known standard library calls.
-- Prefer LSP (symbol lookups, diagnostics) over Grep for finding code references, type errors, and renaming. Use Grep only for string literals, log messages, and comments.
+- `plugin:repomix-mcp:repomix` — broad structure, cross-cutting concerns, multi-module relationships. Built-in Read/Grep/Glob for targeted searches (specific function, single file, known path).
+- `plugin:context7:context7` — library docs when an API is unfamiliar, recently changed, or version-sensitive; skip stable stdlib. Verify signatures here (or via source/LSP) before calling an unfamiliar API.
+- LSP over Grep for symbols, type errors, and references. Grep only for string literals, comments, log messages.
 
 ### CLI tools
 
@@ -14,36 +14,33 @@ When running Bash commands, prefer these over defaults:
 |------|----------|-------|
 | `rg` | grep | fast regex |
 | `fd` | find | fast file finder |
-| `ast-grep` | - | AST-aware search — prefer over rg when matching code patterns (function signatures, import statements, class definitions). Use rg for string literals, comments, log messages. |
+| `ast-grep` | - | AST-aware search — prefer over rg for code patterns (signatures, imports, class definitions). rg for string literals, comments, log messages. |
 | `trash` | rm | recoverable delete (destructive `rm` flags are blocked by hooks) |
-| `jq` | python/sed/awk/scripts | JSON parsing and transformation — use `jq` directly in Bash, never custom scripts |
-| `yq` | python/sed/awk/scripts | YAML parsing and transformation — use `yq` directly in Bash, never custom scripts |
+| `jq` | python/sed/awk/scripts | JSON parsing and transformation — use directly, never custom scripts |
+| `yq` | python/sed/awk/scripts | YAML parsing and transformation — use directly, never custom scripts |
 
 ## Philosophy
 
-- **No speculative features** — Don't add features, flags, or configuration unless actively needed.
-- **No premature abstraction** — Don't create utilities until you've written the same code three times.
-- **Replace, don't deprecate** — Remove old implementations entirely when the replacement is in place and all internal callers are updated. No shims, dual formats, or migration paths. Flag dead code.
-- **Bias toward action** — For easily reversed decisions, decide and move. State your assumption so the reasoning is visible.
-- **Ask before making big decisions** — YOU MUST ask before changing interfaces, data models, architecture, or running destructive/write operations on external services. This includes: schema changes, endpoint signature changes, database migrations, external API mutations, CI/CD config changes.
-- **Finish the job** — Handle edge cases you can see. Clean up what you touched. Flag adjacent breakage you notice, but don't fix things you weren't asked to fix.
-- **Stay within scope** — Constrain all exploration to the target directory or project root. Exhaust what is inside before looking outside, and state your reason if you must widen. Never scan sibling projects to infer preferences — ask the user directly.
+- **No speculative features** — don't add features, flags, or config unless actively needed.
+- **No premature abstraction** — don't extract a utility until the same code repeats three times.
+- **Replace, don't deprecate** — remove old implementations once the replacement lands and callers are updated. No shims, dual formats, or migration paths. Flag dead code.
+- **Bias toward action** — on easily-reversed decisions, decide and move; state your assumption so the reasoning is visible.
+- **Ask first on big decisions** — ask before changing interfaces, data models, or architecture: schema changes, endpoint signatures, migrations, external API mutations, CI/CD config.
+- **Finish the job** — handle visible edge cases, clean up what you touched, flag adjacent breakage without fixing unrequested work.
+- **Stay within scope** — constrain exploration to the target directory or project root; state your reason before widening. Ask the user about preferences — never infer them from sibling projects.
 
 ## Code Quality
 
-- When suppressing a warning with an inline ignore, YOU MUST add a justification comment explaining why.
-- Propagate all exceptions with context: operation name, input value, and a suggested fix. Never swallow exceptions silently.
-- No commented-out code — delete it.
-- **Verify API and library function signatures** from documentation (context7), source code, or LSP before using them.
+- Inline warning-suppression needs a justification comment.
+- Propagate exceptions with context (operation, input value, suggested fix). Never swallow them silently.
+- Delete commented-out code.
 
 ## Workflow
 
-**Commits:** Conventional commits (`feat`/`fix`/`refactor`/`perf` for production; `chore`/`test`/`docs` for the rest). Use `refactor` (not `fix`) for bugs not yet released. Imperative mood, ≤72 char subject, one logical change per commit.
-
-**Dependencies:** When adding dependencies, CI actions, or tool versions, always verify the current stable version from the registry or documentation.
+- **Commits:** conventional (`feat`/`fix`/`refactor`/`perf` for production; `chore`/`test`/`docs` otherwise). `refactor` not `fix` for unreleased bugs. Imperative, ≤72-char subject, one logical change.
+- **Dependencies:** verify current stable version from registry/docs before adding deps, CI actions, or tool versions.
+- **Debug:** read the failing test and error first; check docs via context7 for dependency issues. Max 2 debug scripts before re-reading the code and changing approach.
 
 ## Response style
 
-No filler, no pleasantries, no hedging. Drop articles where meaning survives. State the problem, state the fix, stop. Code blocks and technical terms stay exact. Never open with "Sure", "Great question", "I'd be happy to", or similar.
-
-@RTK.md
+No filler, pleasantries, or hedging. Drop articles where meaning survives. State the problem, state the fix, stop. Keep code blocks and technical terms exact. Never open with "Sure", "Great question", "I'd be happy to", or similar.

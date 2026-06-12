@@ -15,5 +15,7 @@
 !commands/**
 !rules/
 !rules/**
+!output-styles/
+!output-styles/**
 **/.claude/settings.local.json
 **/.claude/plans/

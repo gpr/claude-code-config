@@ -9,7 +9,8 @@
     "ENABLE_LSP_TOOLS": "1",
     "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
     "DISABLE_BUG_COMMAND": "1",
-    "FORCE_AUTOUPDATE_PLUGINS": "1"
+    "FORCE_AUTOUPDATE_PLUGINS": "1",
+    "RTK_HOOK_AUDIT": "1"
   },
   "includeGitInstructions": false,
   "permissions": {
@@ -85,7 +86,18 @@
       "WebFetch(domain:diataxis.fr)",
       "WebFetch(domain:docs.readthedocs.com)",
       "WebFetch(domain:diataxis-template.readthedocs.io)",
-      "WebFetch(domain:gist.github.com)"
+      "WebFetch(domain:gist.github.com)",
+      "Bash(rtk ls *)",
+      "Edit(~/.claude/skills/opsx-tdd/**)",
+      "Bash(rtk grep *)",
+      "Bash(rtk read *)",
+      "Bash(awk '/^---$/{c++} c==1')",
+      "Edit(~/.claude/skills/opsx-team-tdd/**)",
+      "Edit(~/.claude/skills/opqw-tdd-v2/**)",
+      "Read(//Users/gregory.rome/**)",
+      "Bash(rtk find *)",
+      "Bash(./scripts/validate_managed_settings.py)",
+      "Bash(echo \"exit=$?\")"
     ],
     "deny": [
       "Bash(ssh:*)",
@@ -126,7 +138,7 @@
     ],
     "defaultMode": "plan"
   },
-  "model": "opus[1m]",
+  "model": "claude-opus-4-6",
   "enableAllProjectMcpServers": false,
   "hooks": {
     "PreToolUse": [
@@ -148,12 +160,24 @@
             "command": "rtk hook claude"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CMD=$(echo \"$TOOL_INPUT\" | jq -r '.command'); case \"$CMD\" in grep\\ *|grep) echo 'BLOCKED: Use the Grep tool or rg instead of grep' >&2; exit 2;; head\\ *|head) echo 'BLOCKED: Use the Read tool instead of head' >&2; exit 2;; tail\\ *|tail) echo 'BLOCKED: Use the Read tool instead of tail' >&2; exit 2;; esac"
+          }
+        ]
       }
     ]
   },
+  "worktree": {
+    "baseRef": "fresh"
+  },
   "statusLine": {
     "type": "command",
-    "command": "~/.claude/scripts/statusline.sh"
+    "command": "/Users/gregory.rome/.claude/scripts/statusline.sh"
   },
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
@@ -167,8 +191,8 @@
     "clangd-lsp@claude-plugins-official": false,
     "commit-commands@claude-plugins-official": false,
     "atlassian@claude-plugins-official": false,
-    "agent-sdk-dev@claude-plugins-official": false,
-    "plugin-dev@claude-plugins-official": true,
+    "agent-sdk-dev@claude-plugins-official": true,
+    "plugin-dev@claude-plugins-official": false,
     "frontend-design@claude-plugins-official": true,
     "feature-dev@claude-plugins-official": false,
     "code-review@claude-plugins-official": false,
@@ -184,7 +208,7 @@
     "firebase@claude-plugins-official": false,
     "claude-code-setup@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
-    "skill-creator@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": false,
     "ruby-lsp@claude-plugins-official": false,
     "remember@claude-plugins-official": false,
     "terraform@claude-plugins-official": false
@@ -282,13 +306,18 @@
       "trash"
     ]
   },
-  "alwaysThinkingEnabled": false,
   "effortLevel": "medium",
+  "promptSuggestionEnabled": false,
+  "awaySummaryEnabled": false,
   "autoUpdatesChannel": "latest",
   "plansDirectory": ".claude/plans",
   "skipDangerousModePermissionPrompt": false,
   "theme": "auto",
-  "teammateMode": "tmux",
+  "switchModelsOnFlag": false,
+  "fileCheckpointingEnabled": false,
+  "teammateMode": "auto",
+  "remoteControlAtStartup": true,
   "inputNeededNotifEnabled": true,
-  "agentPushNotifEnabled": true
+  "agentPushNotifEnabled": true,
+  "useAutoModeDuringPlan": true
 }

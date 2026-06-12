@@ -13,7 +13,7 @@ when_to_use: |
   reviewed change directory under `openspec/changes/<slug>/` ready
   for `/opsx-team-apply`.
 argument-hint: "<short idea or change slug, or empty to ask>"
-model: claude-opus-4-7
+model: claude-opus-4-8
 effort: high
 disable-model-invocation: true
 allowed-tools:

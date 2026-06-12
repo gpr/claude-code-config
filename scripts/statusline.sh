@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Two-line statusline with visual context progress bar
 #
 # Line 1: Model, folder, branch
@@ -6,72 +6,90 @@
 #
 # Context % uses Claude Code's pre-calculated remaining_percentage,
 # which accounts for compaction reserves. 100% = compaction fires.
+#
+# NOTE: All ANSI escapes use \033 (not \e). macOS bash printf %b does not
+# expand \e — using \e would corrupt output and cause Claude Code to reject it.
+# OSC 8 hyperlinks are omitted for the same reason.
+#
+# CLEAN REWRITE: this block replaces the corrupted null-byte section below.
+# The remainder of the file after the null byte is dead code — bash stops there.
+# All logic is now defined here and the _run function is called at the end.
+
+_run() {
+# Resolve jq to a real binary, bypassing mise shims (which fail when the
+# project's mise.toml isn't trusted). Prefer Homebrew, fall back to system.
+JQ=/opt/homebrew/bin/jq
+[ -x "$JQ" ] || JQ=/usr/bin/jq
 
 # Read stdin (Claude Code passes JSON data via stdin)
 stdin_data=$(cat)
 
-# Single jq call - extract all values at once
-# Use null-delimited output to avoid IFS collapsing empty TSV fields
-{
-IFS= read -r -d '' current_dir
-IFS= read -r -d '' project_dir
-IFS= read -r -d '' model_name
-IFS= read -r -d '' ctx_used
-IFS= read -r -d '' cache_pct
-IFS= read -r -d '' five_hour_pct
-IFS= read -r -d '' seven_day_pct
-IFS= read -r -d '' five_hour_resets
-IFS= read -r -d '' worktree_branch
-IFS= read -r -d '' worktree_original_cwd
-IFS= read -r -d '' total_tokens
-IFS= read -r -d '' total_cost
-IFS= read -r -d '' effort_level
-IFS= read -r -d '' thinking_enabled
-IFS= read -r -d '' git_worktree_name
-} < <(
-    echo "$stdin_data" | jq -j '[
-        .workspace.current_dir // "unknown",
-        .workspace.project_dir // .workspace.current_dir // "unknown",
-        .model.display_name // "Unknown",
-        (try (
-            if (.context_window.remaining_percentage // null) != null then
-                100 - (.context_window.remaining_percentage | floor)
-            elif (.context_window.context_window_size // 0) > 0 then
-                (((.context_window.current_usage.input_tokens // 0) +
-                  (.context_window.current_usage.cache_creation_input_tokens // 0) +
-                  (.context_window.current_usage.cache_read_input_tokens // 0)) * 100 /
-                 .context_window.context_window_size) | floor
-            else "null" end
-        ) catch "null"),
-        (try (
-            (.context_window.current_usage // {}) |
-            if (.input_tokens // 0) + (.cache_read_input_tokens // 0) > 0 then
-                ((.cache_read_input_tokens // 0) * 100 /
-                 ((.input_tokens // 0) + (.cache_read_input_tokens // 0))) | floor
-            else 0 end
-        ) catch 0),
-        (.rate_limits.five_hour.used_percentage // ""),
-        (.rate_limits.seven_day.used_percentage // ""),
-        (.rate_limits.five_hour.resets_at // ""),
-        (.worktree.original_branch // ""),
-        (.worktree.original_cwd // ""),
-        (try (
-            (.context_window.total_input_tokens // 0) +
-            (.context_window.total_output_tokens // 0)
-        ) catch 0),
-        (.cost.total_cost_usd // ""),
-        (.effort.level // ""),
-        (if (.thinking? // null) != null and (.thinking | has("enabled")) then .thinking.enabled else "" end),
-        (.workspace.git_worktree // "")
-    ] | map(tostring) | join("\u0000")'
-)
+# Single jq call — extract all values as a single TSV line.
+# @tsv escapes tabs/newlines/backslashes within field values, so paths and
+# model names with spaces are safe. We split on tabs with IFS=$'\t'.
+_jq_out=$(printf '%s' "$stdin_data" | $JQ -r '[
+    .workspace.current_dir // "unknown",
+    .workspace.project_dir // .workspace.current_dir // "unknown",
+    (.model.display_name // .model.id // "Unknown"),
+    (try (
+        if (.context_window.remaining_percentage // null) != null then
+            (100 - (.context_window.remaining_percentage | floor)) | tostring
+        elif (.context_window.context_window_size // 0) > 0 then
+            (((.context_window.current_usage.input_tokens // 0) +
+              (.context_window.current_usage.cache_creation_input_tokens // 0) +
+              (.context_window.current_usage.cache_read_input_tokens // 0)) * 100 /
+             .context_window.context_window_size) | floor | tostring
+        else "" end
+    ) catch ""),
+    (try (
+        (.context_window.current_usage // {}) |
+        if (.input_tokens // 0) + (.cache_read_input_tokens // 0) > 0 then
+            ((.cache_read_input_tokens // 0) * 100 /
+             ((.input_tokens // 0) + (.cache_read_input_tokens // 0))) | floor | tostring
+        else "0" end
+    ) catch "0"),
+    ((.rate_limits.five_hour.used_percentage  // "") | tostring | if . == "null" then "" else . end),
+    ((.rate_limits.seven_day.used_percentage  // "") | tostring | if . == "null" then "" else . end),
+    ((.rate_limits.five_hour.resets_at        // "") | tostring | if . == "null" then "" else . end),
+    (.worktree.original_branch // ""),
+    (.worktree.original_cwd    // ""),
+    (try (
+        ((.context_window.total_input_tokens  // 0) +
+         (.context_window.total_output_tokens // 0)) | tostring
+    ) catch "0"),
+    ((.cost.total_cost_usd // "") | tostring | if . == "null" then "" else . end),
+    (.effort.level // ""),
+    (if (.thinking? // null) != null and (.thinking | has("enabled")) then (.thinking.enabled | tostring) else "" end),
+    (.workspace.git_worktree // "")
+] | @tsv' 2>/dev/null)
+
+# Parse the tab-separated fields into individual variables
+IFS=$'\t' read -r \
+    current_dir project_dir model_name ctx_used cache_pct \
+    five_hour_pct seven_day_pct five_hour_resets \
+    worktree_branch worktree_original_cwd \
+    total_tokens total_cost effort_level thinking_enabled git_worktree_name \
+    <<< "$_jq_out"
+
+# Bash-level fallback: if jq crashed or produced no output, extract fields individually
+if [ -z "$current_dir" ] && [ -z "$model_name" ]; then
+    current_dir=$(printf '%s' "$stdin_data" | $JQ -r '.workspace.current_dir // .cwd // "unknown"' 2>/dev/null)
+    project_dir=$(printf '%s' "$stdin_data" | $JQ -r '.workspace.project_dir // .workspace.current_dir // .cwd // "unknown"' 2>/dev/null)
+    model_name=$(printf '%s' "$stdin_data" | $JQ -r '.model.display_name // .model.id // "Unknown"' 2>/dev/null)
+    ctx_used="" cache_pct="0" five_hour_pct="" seven_day_pct="" five_hour_resets=""
+    worktree_branch="" worktree_original_cwd="" total_tokens="0" total_cost=""
+    effort_level="" thinking_enabled="" git_worktree_name=""
+fi
+: "${current_dir:=unknown}"
+: "${project_dir:=$current_dir}"
+: "${model_name:=Unknown}"
 
 # Enterprise rate limit cache (API key users — skipped when claude.ai rate_limits present)
 enterprise_tok_pct=""
 _rl_cache="$HOME/.claude/cache/rate_limits.json"
 if [ -f "$_rl_cache" ]; then
     read -r _cached_at _tok_pct < <(
-        jq -r '[.cached_at // 0, .tokens_pct // ""] | @tsv' "$_rl_cache" 2>/dev/null
+        $JQ -r '[.cached_at // 0, .tokens_pct // ""] | @tsv' "$_rl_cache" 2>/dev/null
     )
     _now=$(date +%s)
     if [ "$(( _now - _cached_at ))" -le 300 ] 2>/dev/null; then
@@ -80,29 +98,6 @@ if [ -f "$_rl_cache" ]; then
     unset _cached_at _tok_pct _now
 fi
 unset _rl_cache
-
-# Bash-level fallback: if jq crashed entirely, extract fields individually
-if [ -z "$current_dir" ] && [ -z "$model_name" ]; then
-    current_dir=$(echo "$stdin_data" | jq -r '.workspace.current_dir // .cwd // "unknown"' 2>/dev/null)
-    project_dir=$(echo "$stdin_data" | jq -r '.workspace.project_dir // .workspace.current_dir // .cwd // "unknown"' 2>/dev/null)
-    model_name=$(echo "$stdin_data" | jq -r '.model.display_name // "Unknown"' 2>/dev/null)
-    ctx_used=""
-    cache_pct="0"
-    five_hour_pct=""
-    seven_day_pct=""
-    five_hour_resets=""
-    worktree_branch=""
-    worktree_original_cwd=""
-    total_tokens="0"
-    total_cost=""
-    effort_level=""
-    thinking_enabled=""
-    git_worktree_name=""
-    enterprise_tok_pct=""
-    : "${current_dir:=unknown}"
-    : "${project_dir:=$current_dir}"
-    : "${model_name:=Unknown}"
-fi
 
 # Determine starting directory for git commands.
 # Priority: Claude --worktree session original cwd > project_dir
@@ -115,19 +110,12 @@ fi
 # Git info — run from git_dir, then resolve the real repo root so that
 # git linked worktrees (workspace.git_worktree set, .git is a file not a dir)
 # work identically to normal checkouts.
-git_branch=""
-git_staged=0
-git_modified=0
-github_url=""
-github_project=""
-git_repo_root=""
+git_branch="" git_staged=0 git_modified=0 github_url="" github_project="" git_repo_root=""
 if cd "$git_dir" 2>/dev/null; then
-    # Resolve true repo root (handles both .git dirs and .git files used by worktrees)
     git_repo_root=$(git -c core.useBuiltinFSMonitor=false rev-parse --show-toplevel 2>/dev/null)
     git_branch=$(git -c core.useBuiltinFSMonitor=false branch --show-current 2>/dev/null)
     git_staged=$(git diff --cached --numstat 2>/dev/null | wc -l | tr -d ' ')
     git_modified=$(git diff --numstat 2>/dev/null | wc -l | tr -d ' ')
-    # Try origin first, then any remote, convert SSH to HTTPS, strip .git suffix
     raw_remote=$(git remote get-url origin 2>/dev/null)
     if [ -z "$raw_remote" ]; then
         raw_remote=$(git remote | head -1 | xargs -I{} git remote get-url {} 2>/dev/null)
@@ -135,7 +123,6 @@ if cd "$git_dir" 2>/dev/null; then
     github_url=$(echo "$raw_remote" \
         | sed 's|[^@]*@github\.com:|https://github.com/|' \
         | sed 's|\.git$||')
-    # Only keep the URL if it points to GitHub
     case "$github_url" in
         https://github.com/*) ;;
         *) github_url="" ;;
@@ -149,9 +136,6 @@ if [ -n "$worktree_original_cwd" ]; then
 fi
 
 # Build folder display.
-# Use the real repo root name when available (handles git worktrees where
-# project_dir is a worktree subdirectory like .claude/worktrees/<name>).
-# Fall back chain: git_repo_root > worktree_original_cwd > project_dir
 if [ -n "$worktree_original_cwd" ]; then
     proj_name=$(basename "$worktree_original_cwd")
 elif [ -n "$git_repo_root" ]; then
@@ -167,31 +151,22 @@ else
 fi
 
 # Generate visual progress bar for context usage
-progress_bar=""
-bar_width=12
-
-if [ -n "$ctx_used" ] && [ "$ctx_used" != "null" ]; then
+progress_bar="" bar_width=12
+if [ -n "$ctx_used" ] && [ "$ctx_used" != "null" ] && [ "$ctx_used" -ge 0 ] 2>/dev/null; then
     filled=$((ctx_used * bar_width / 100))
     empty=$((bar_width - filled))
-
     if [ "$ctx_used" -lt 50 ]; then
-        bar_color='\033[32m'  # Green (0-49%)
+        bar_color='\033[32m'
     elif [ "$ctx_used" -lt 80 ]; then
-        bar_color='\033[33m'  # Yellow (50-79%)
+        bar_color='\033[33m'
     else
-        bar_color='\033[31m'  # Red (80-100%)
+        bar_color='\033[31m'
     fi
-
     progress_bar="${bar_color}"
-    for ((i=0; i<filled; i++)); do
-        progress_bar="${progress_bar}█"
-    done
+    for ((i=0; i<filled; i++)); do progress_bar="${progress_bar}█"; done
     progress_bar="${progress_bar}\033[2m"
-    for ((i=0; i<empty; i++)); do
-        progress_bar="${progress_bar}⣿"
-    done
+    for ((i=0; i<empty; i++)); do progress_bar="${progress_bar}⣿"; done
     progress_bar="${progress_bar}\033[0m"
-
     ctx_pct="${ctx_used}%"
 else
     ctx_pct=""
@@ -200,8 +175,167 @@ fi
 # Separator
 SEP='\033[2m│\033[0m'
 
-# Get short model name (e.g., "Sonnet 4.6" instead of "Claude Sonnet 4.6")
-short_model=$(echo "$model_name" | sed -E 's/Claude [0-9.]+ //; s/^Claude //')
+# Get short model name (e.g., "Sonnet 4.6 (1M)" from "Sonnet 4.6 (1M context)")
+short_model=$(printf '%s' "$model_name" \
+    | sed -E 's/Claude [0-9.]+ //; s/^Claude //' \
+    | sed -E 's/^claude-//; s/-([0-9])/ \1/g; s/\[([^]]+)\]/ (\1)/g' \
+    | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2); print}')
+
+# Thinking indicator
+case "$thinking_enabled" in
+    true)  thinking_icon="🧠" ;;
+    false) thinking_icon="💤" ;;
+    *)     thinking_icon="" ;;
+esac
+
+# Effort badge (only when present)
+effort_badge=""
+if [ -n "$effort_level" ]; then
+    effort_cap="$(printf '%s' "$effort_level" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
+    case "$effort_level" in
+        low)    effort_glyph="○" ;;
+        medium) effort_glyph="◐" ;;
+        high)   effort_glyph="●" ;;
+        xhigh)  effort_glyph="◉" ;;
+        ultra)  effort_glyph="◎" ;;
+        *)      effort_glyph="◌" ;;
+    esac
+    effort_badge=$(printf ' %s %s' "$effort_glyph" "$effort_cap")
+fi
+
+# Auth / login info
+auth_badge=""
+if [ -n "$ANTHROPIC_BASE_URL" ]; then
+    base_host=$(printf '%s' "$ANTHROPIC_BASE_URL" | sed -E 's|^https?://([^/]+).*|\1|')
+    auth_badge=$(printf '\033[2m🔗 %s\033[0m' "$base_host")
+elif [ -n "$ANTHROPIC_API_KEY" ]; then
+    auth_badge=$(printf '\033[2mAPI key\033[0m')
+else
+    _auth_email=""
+    for _f in "$HOME/.claude.json" "$HOME/.claude/config.json" "$HOME/.claude/.config.json"; do
+        if [ -f "$_f" ]; then
+            _auth_email=$(jq -r '.oauthAccount.emailAddress // .accountEmail // .email // empty' "$_f" 2>/dev/null)
+            [ -n "$_auth_email" ] && break
+        fi
+    done
+    if [ -n "$_auth_email" ]; then
+        auth_badge=$(printf '\033[2m👤 %s\033[0m' "$_auth_email")
+    fi
+    unset _f _auth_email
+fi
+
+# LINE 1: [Model] [thinking] [effort] | auth | folder | branch
+line1=$(printf '\033[37m[%s]\033[0m' "$short_model")
+[ -n "$thinking_icon" ] && line1="$line1 $thinking_icon"
+[ -n "$effort_badge" ] && line1="${line1}$(printf '%b' "$effort_badge")"
+[ -n "$auth_badge" ] && line1="$line1 $(printf '%b %b' "$SEP" "$auth_badge")"
+if [ -n "$github_url" ]; then
+    line1="$line1 $(printf '\033[94m🐙 %s 📁 \033[2m%s\033[0m' "$github_project" "$folder_name")"
+else
+    line1="$line1 $(printf '\033[94m📁 %s\033[0m' "$folder_name")"
+fi
+if [ -n "$git_branch" ]; then
+    git_diff_stats=""
+    [ "$git_staged" -gt 0 ] && git_diff_stats="$(printf '\033[32m+%s\033[0m' "$git_staged")"
+    [ "$git_modified" -gt 0 ] && git_diff_stats="${git_diff_stats}$(printf '\033[33m~%s\033[0m' "$git_modified")"
+    if [ -n "$worktree_branch" ]; then
+        line1="$line1 $(printf '%b \033[96m🌿 %s\033[0m%b \033[2m⤴ %s\033[0m' \
+            "$SEP" "$git_branch" "${git_diff_stats:+ $git_diff_stats}" "$worktree_branch")"
+    else
+        line1="$line1 $(printf '%b \033[96m🌿 %s\033[0m%b' \
+            "$SEP" "$git_branch" "${git_diff_stats:+ $git_diff_stats}")"
+    fi
+fi
+
+# LINE 2: Progress bar | Context % | tokens | cost | rate limits | cache hit %
+line2=""
+[ -n "$progress_bar" ] && line2=$(printf '%b' "$progress_bar")
+if [ -n "$ctx_pct" ]; then
+    [ -n "$line2" ] \
+        && line2="$line2 $(printf '\033[37m%s\033[0m' "$ctx_pct")" \
+        || line2=$(printf '\033[37m%s\033[0m' "$ctx_pct")
+fi
+if [ -n "$total_tokens" ] && [ "$total_tokens" != "0" ] 2>/dev/null; then
+    if [ "$total_tokens" -ge 1000000 ] 2>/dev/null; then
+        tok_display=$(awk "BEGIN {printf \"%.1fM\", $total_tokens/1000000}")
+    elif [ "$total_tokens" -ge 1000 ] 2>/dev/null; then
+        tok_display=$(awk "BEGIN {printf \"%.0fk\", $total_tokens/1000}")
+    else
+        tok_display="${total_tokens}"
+    fi
+    [ -n "$line2" ] \
+        && line2="$line2 $(printf '%b \033[2m%s tok\033[0m' "$SEP" "$tok_display")" \
+        || line2=$(printf '\033[2m%s tok\033[0m' "$tok_display")
+fi
+if [ -n "$total_cost" ]; then
+    cost_display=$(awk "BEGIN {printf \"\$%.2f\", $total_cost}")
+    [ -n "$line2" ] \
+        && line2="$line2 $(printf '%b \033[33m💰 %s\033[0m' "$SEP" "$cost_display")" \
+        || line2=$(printf '\033[33m💰 %s\033[0m' "$cost_display")
+fi
+if [ -n "$five_hour_pct" ]; then
+    five_int=$(printf '%.0f' "$five_hour_pct")
+    [ -n "$line2" ] \
+        && line2="$line2 $(printf '%b \033[35m5h:%s%%\033[0m' "$SEP" "$five_int")" \
+        || line2=$(printf '\033[35m5h:%s%%\033[0m' "$five_int")
+fi
+if [ -n "$seven_day_pct" ]; then
+    week_int=$(printf '%.0f' "$seven_day_pct")
+    [ -n "$line2" ] \
+        && line2="$line2 $(printf '\033[35m7d:%s%%\033[0m' "$week_int")" \
+        || line2=$(printf '\033[35m7d:%s%%\033[0m' "$week_int")
+fi
+if [ -z "$five_hour_pct" ] && [ -n "$enterprise_tok_pct" ]; then
+    tok_int=$(printf '%.0f' "$enterprise_tok_pct")
+    [ -n "$line2" ] \
+        && line2="$line2 $(printf '%b \033[35mtok:%s%%\033[0m' "$SEP" "$tok_int")" \
+        || line2=$(printf '\033[35mtok:%s%%\033[0m' "$tok_int")
+fi
+reset_display=""
+if [ -n "$five_hour_resets" ]; then
+    reset_display=$(date -r "$five_hour_resets" "+%l%p %Z" 2>/dev/null \
+        | sed 's/AM/am/;s/PM/pm/' | sed 's/^ //')
+fi
+[ -n "$reset_display" ] && line2="$line2 $(printf '\033[2m(%s)\033[0m' "$reset_display")"
+if [ "$cache_pct" -gt 0 ] 2>/dev/null; then
+    [ -n "$line2" ] \
+        && line2="$line2 $(printf '%b \033[2m↻%s%%\033[0m' "$SEP" "$cache_pct")" \
+        || line2=$(printf '\033[2m↻%s%%\033[0m' "$cache_pct")
+fi
+
+# LINE 3: Added directories (only when present)
+line3=""
+while IFS= read -r dir_path; do
+    [ -z "$dir_path" ] && continue
+    dir_name="${dir_path##*/}"
+    [ -n "$line3" ] && line3="$line3 "
+    line3="${line3}$(printf '\033[94m📁 %s\033[0m' "$dir_name")"
+done < <(printf '%s' "$stdin_data" | $JQ -r '.workspace.added_dirs // [] | .[]')
+
+if [ -n "$line3" ]; then
+    printf '%b\n\n%b\n\n%b' "$line1" "$line2" "$line3"
+else
+    printf '%b\n\n%b' "$line1" "$line2"
+fi
+} # end _run
+
+_run
+: <<'_DEAD_CODE_EOF_'
+\u0000
+# Enterprise rate limit cache (API key users — skipped when claude.ai rate_limits present)
+enterprise_tok_pct=""
+_rl_cache="$HOME/.claude/cache/rate_limits.json"
+if [ -f "$_rl_cache" ]; then
+    read -r _cached_at _tok_pct < <(
+        $JQ -r '[.cached_at // 0, .tokens_pct // ""] | @tsv' "$_rl_cache" 2>/dev/null
+    )
+    _now=$(date +%s)
+    if [ "$(( _now - _cached_at ))" -le 300 ] 2>/dev/null; then
+        enterprise_tok_pct="$_tok_pct"
+    fi
+    unset _cached_at _tok_pct _now
+fi
+unset _rl_cache
 
 # Thinking indicator
 case "$thinking_enabled" in
@@ -261,10 +395,9 @@ if [ -n "$auth_badge" ]; then
     line1="$line1 $(printf '%b %b' "$SEP" "$auth_badge")"
 fi
 if [ -n "$github_url" ]; then
-    # OSC 8 hyperlink: \e]8;;URL\atext\e]8;;\a
-    line1="$line1 $(printf '%b' "\033[94m🐙 \e]8;;${github_url}\a${github_project}\e]8;;\a 📁 \e]8;;vscode://file${project_dir}\a\033[2m${folder_name}\e]8;;\a\033[0m")"
+    line1="$line1 $(printf '\033[94m🐙 %s 📁 \033[2m%s\033[0m' "$github_project" "$folder_name")"
 else
-    line1="$line1 $(printf '%b' "\033[94m📁 \e]8;;vscode://file${project_dir}\a${folder_name}\e]8;;\a\033[0m")"
+    line1="$line1 $(printf '\033[94m📁 %s\033[0m' "$folder_name")"
 fi
 if [ -n "$git_branch" ]; then
     git_diff_stats=""
@@ -330,43 +463,5 @@ if [ -n "$seven_day_pct" ]; then
         line2=$(printf '\033[35m7d:%s%%\033[0m' "$week_int")
     fi
 fi
-# Enterprise token rate limit (only when native rate_limits absent)
-if [ -z "$five_hour_pct" ] && [ -n "$enterprise_tok_pct" ]; then
-    tok_int=$(printf '%.0f' "$enterprise_tok_pct")
-    if [ -n "$line2" ]; then
-        line2="$line2 $(printf '%b \033[35mtok:%s%%\033[0m' "$SEP" "$tok_int")"
-    else
-        line2=$(printf '\033[35mtok:%s%%\033[0m' "$tok_int")
-    fi
-fi
-# Format 5-hour reset time (resets_at is Unix epoch seconds)
-reset_display=""
-if [ -n "$five_hour_resets" ]; then
-    reset_display=$(date -r "$five_hour_resets" "+%l%p %Z" 2>/dev/null \
-        | sed 's/AM/am/;s/PM/pm/' | sed 's/^ //')
-fi
-if [ -n "$reset_display" ]; then
-    line2="$line2 $(printf '\033[2m(%s)\033[0m' "$reset_display")"
-fi
-if [ "$cache_pct" -gt 0 ] 2>/dev/null; then
-    if [ -n "$line2" ]; then
-        line2="$line2 $(printf '%b \033[2m↻%s%%\033[0m' "$SEP" "$cache_pct")"
-    else
-        line2=$(printf '\033[2m↻%s%%\033[0m' "$cache_pct")
-    fi
-fi
+_DEAD_CODE_EOF_
 
-# LINE 3: Added directories with vscode:// links (only when present)
-line3=""
-while IFS= read -r dir_path; do
-    [ -z "$dir_path" ] && continue
-    dir_name="${dir_path##*/}"
-    [ -n "$line3" ] && line3="$line3 "
-    line3="${line3}$(printf '%b' "\033[94m📁 \e]8;;vscode://file${dir_path}\a${dir_name}\e]8;;\a\033[0m")"
-done < <(echo "$stdin_data" | jq -r '.workspace.added_dirs // [] | .[]')
-
-if [ -n "$line3" ]; then
-    printf '%b\n\n%b\n\n%b' "$line1" "$line2" "$line3"
-else
-    printf '%b\n\n%b' "$line1" "$line2"
-fi

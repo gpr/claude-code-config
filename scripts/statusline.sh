@@ -26,7 +26,8 @@ stdin_data=$(cat)
 
 # Single jq call — extract all values as a single TSV line.
 # @tsv escapes tabs/newlines/backslashes within field values, so paths and
-# model names with spaces are safe. We split on tabs with IFS=$'\t'.
+# Unit separator (\x01) instead of tab — bash read collapses consecutive
+# tabs (IFS whitespace), losing empty fields like worktree_branch/cwd.
 _jq_out=$(printf '%s' "$stdin_data" | $JQ -r '[
     .workspace.current_dir // "unknown",
     .workspace.project_dir // .workspace.current_dir // "unknown",
@@ -60,15 +61,17 @@ _jq_out=$(printf '%s' "$stdin_data" | $JQ -r '[
     ((.cost.total_cost_usd // "") | tostring | if . == "null" then "" else . end),
     (.effort.level // ""),
     (if (.thinking? // null) != null and (.thinking | has("enabled")) then (.thinking.enabled | tostring) else "" end),
-    (.workspace.git_worktree // "")
-] | @tsv' 2>/dev/null)
+    (.workspace.git_worktree // ""),
+    (.session_id // "")
+] | join("")' 2>/dev/null)
 
-# Parse the tab-separated fields into individual variables
-IFS=$'\t' read -r \
+# Parse the unit-separator-delimited fields into individual variables
+IFS=$'\x01' read -r \
     current_dir project_dir model_name ctx_used cache_pct \
     five_hour_pct seven_day_pct five_hour_resets \
     worktree_branch worktree_original_cwd \
     total_tokens total_cost effort_level thinking_enabled git_worktree_name \
+    session_id \
     <<< "$_jq_out"
 
 # Bash-level fallback: if jq crashed or produced no output, extract fields individually
@@ -78,7 +81,7 @@ if [ -z "$current_dir" ] && [ -z "$model_name" ]; then
     model_name=$(printf '%s' "$stdin_data" | $JQ -r '.model.display_name // .model.id // "Unknown"' 2>/dev/null)
     ctx_used="" cache_pct="0" five_hour_pct="" seven_day_pct="" five_hour_resets=""
     worktree_branch="" worktree_original_cwd="" total_tokens="0" total_cost=""
-    effort_level="" thinking_enabled="" git_worktree_name=""
+    effort_level="" thinking_enabled="" git_worktree_name="" session_id=""
 fi
 : "${current_dir:=unknown}"
 : "${project_dir:=$current_dir}"
@@ -273,17 +276,61 @@ if [ -n "$total_cost" ]; then
         && line2="$line2 $(printf '%b \033[33m💰 %s\033[0m' "$SEP" "$cost_display")" \
         || line2=$(printf '\033[33m💰 %s\033[0m' "$cost_display")
 fi
+# Monthly cost accumulator — track per-session costs across sessions
+_monthly_budget="${CLAUDE_MONTHLY_BUDGET:-2000}"
+_cost_file="$HOME/.claude/cache/monthly_cost.json"
+_cur_month=$(date +%Y-%m)
+_session_key="${session_id:-$PPID}"
+if [ -n "$total_cost" ] && [ "$total_cost" != "0" ] 2>/dev/null; then
+    _stored_month=""
+    [ -f "$_cost_file" ] && _stored_month=$($JQ -r '.month // ""' "$_cost_file" 2>/dev/null)
+    if [ "$_stored_month" = "$_cur_month" ]; then
+        $JQ --arg sid "$_session_key" --argjson cost "$total_cost" \
+            '.sessions[$sid] = $cost | .total = ([.sessions[]] | add)' \
+            "$_cost_file" > "${_cost_file}.tmp" 2>/dev/null \
+            && mv "${_cost_file}.tmp" "$_cost_file"
+    else
+        printf '{"month":"%s","sessions":{"%s":%s},"total":%s}\n' \
+            "$_cur_month" "$_session_key" "$total_cost" "$total_cost" > "$_cost_file"
+    fi
+fi
+_monthly_total=""
+if [ -f "$_cost_file" ]; then
+    _stored_month=$($JQ -r '.month // ""' "$_cost_file" 2>/dev/null)
+    if [ "$_stored_month" = "$_cur_month" ]; then
+        _monthly_total=$($JQ -r '.total // 0' "$_cost_file" 2>/dev/null)
+    fi
+fi
+if [ -n "$_monthly_total" ] && [ "$_monthly_total" != "0" ] 2>/dev/null; then
+    _monthly_display=$(awk "BEGIN {printf \"\$%.0f/\$${_monthly_budget}\", $_monthly_total}")
+    _budget_pct=$(awk "BEGIN {printf \"%.0f\", $_monthly_total * 100 / $_monthly_budget}")
+    if [ "$_budget_pct" -lt 50 ] 2>/dev/null; then
+        _budget_color='\033[32m'
+    elif [ "$_budget_pct" -lt 80 ] 2>/dev/null; then
+        _budget_color='\033[33m'
+    else
+        _budget_color='\033[31m'
+    fi
+    [ -n "$line2" ] \
+        && line2="$line2 $(printf '%b %b📊 %s\033[0m' "$SEP" "$_budget_color" "$_monthly_display")" \
+        || line2=$(printf '%b📊 %s\033[0m' "$_budget_color" "$_monthly_display")
+fi
+_rl_threshold=20
 if [ -n "$five_hour_pct" ]; then
     five_int=$(printf '%.0f' "$five_hour_pct")
-    [ -n "$line2" ] \
-        && line2="$line2 $(printf '%b \033[35m5h:%s%%\033[0m' "$SEP" "$five_int")" \
-        || line2=$(printf '\033[35m5h:%s%%\033[0m' "$five_int")
+    if [ "$five_int" -ge "$_rl_threshold" ] 2>/dev/null; then
+        [ -n "$line2" ] \
+            && line2="$line2 $(printf '%b \033[35m5h:%s%%\033[0m' "$SEP" "$five_int")" \
+            || line2=$(printf '\033[35m5h:%s%%\033[0m' "$five_int")
+    fi
 fi
 if [ -n "$seven_day_pct" ]; then
     week_int=$(printf '%.0f' "$seven_day_pct")
-    [ -n "$line2" ] \
-        && line2="$line2 $(printf '\033[35m7d:%s%%\033[0m' "$week_int")" \
-        || line2=$(printf '\033[35m7d:%s%%\033[0m' "$week_int")
+    if [ "$week_int" -ge "$_rl_threshold" ] 2>/dev/null; then
+        [ -n "$line2" ] \
+            && line2="$line2 $(printf '\033[35m7d:%s%%\033[0m' "$week_int")" \
+            || line2=$(printf '\033[35m7d:%s%%\033[0m' "$week_int")
+    fi
 fi
 if [ -z "$five_hour_pct" ] && [ -n "$enterprise_tok_pct" ]; then
     tok_int=$(printf '%.0f' "$enterprise_tok_pct")
@@ -292,7 +339,7 @@ if [ -z "$five_hour_pct" ] && [ -n "$enterprise_tok_pct" ]; then
         || line2=$(printf '\033[35mtok:%s%%\033[0m' "$tok_int")
 fi
 reset_display=""
-if [ -n "$five_hour_resets" ]; then
+if [ -n "$five_hour_resets" ] && [ "${five_int:-0}" -ge "$_rl_threshold" ] 2>/dev/null; then
     reset_display=$(date -r "$five_hour_resets" "+%l%p %Z" 2>/dev/null \
         | sed 's/AM/am/;s/PM/pm/' | sed 's/^ //')
 fi

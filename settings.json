@@ -138,7 +138,6 @@
     ],
     "defaultMode": "plan"
   },
-  "model": "claude-opus-4-6",
   "enableAllProjectMcpServers": false,
   "hooks": {
     "PreToolUse": [
@@ -192,7 +191,7 @@
     "commit-commands@claude-plugins-official": false,
     "atlassian@claude-plugins-official": false,
     "agent-sdk-dev@claude-plugins-official": true,
-    "plugin-dev@claude-plugins-official": false,
+    "plugin-dev@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true,
     "feature-dev@claude-plugins-official": false,
     "code-review@claude-plugins-official": false,
@@ -303,7 +302,8 @@
       "prek",
       "git",
       "aws",
-      "trash"
+      "trash",
+      "gh"
     ]
   },
   "effortLevel": "medium",
@@ -319,5 +319,6 @@
   "remoteControlAtStartup": true,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
-  "useAutoModeDuringPlan": true
+  "useAutoModeDuringPlan": true,
+  "model": "claude-opus-4-6"
 }

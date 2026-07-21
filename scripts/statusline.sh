@@ -281,14 +281,34 @@ _monthly_budget="${CLAUDE_MONTHLY_BUDGET:-2000}"
 _cost_file="$HOME/.claude/cache/monthly_cost.json"
 _cur_month=$(date +%Y-%m)
 _session_key="${session_id:-$PPID}"
+
+# Validate the cache file is well-formed, single-document JSON with the
+# expected shape before trusting it. A corrupted file (e.g. trailing bytes
+# left over from a previous partial write) makes jq exit non-zero on every
+# read/write, which used to silently skip the mv below and freeze the total
+# forever. If invalid, reset to a fresh document instead of limping along.
+if [ -f "$_cost_file" ] && ! $JQ -e 'type == "object" and has("month") and has("sessions") and has("total")' "$_cost_file" >/dev/null 2>&1; then
+    rm -f "$_cost_file"
+fi
+
 if [ -n "$total_cost" ] && [ "$total_cost" != "0" ] 2>/dev/null; then
     _stored_month=""
     [ -f "$_cost_file" ] && _stored_month=$($JQ -r '.month // ""' "$_cost_file" 2>/dev/null)
     if [ "$_stored_month" = "$_cur_month" ]; then
-        $JQ --arg sid "$_session_key" --argjson cost "$total_cost" \
+        # Unique per-invocation tmp file (mktemp) avoids the race where two
+        # concurrent statusline runs both write "${_cost_file}.tmp" and
+        # interleave/corrupt each other's output. Only mv into place if jq
+        # succeeded AND produced valid, non-empty JSON.
+        _tmp_cost_file=$(mktemp "${_cost_file}.XXXXXX" 2>/dev/null) || _tmp_cost_file="${_cost_file}.tmp.$$"
+        if $JQ --arg sid "$_session_key" --argjson cost "$total_cost" \
             '.sessions[$sid] = $cost | .total = ([.sessions[]] | add)' \
-            "$_cost_file" > "${_cost_file}.tmp" 2>/dev/null \
-            && mv "${_cost_file}.tmp" "$_cost_file"
+            "$_cost_file" > "$_tmp_cost_file" 2>/dev/null \
+            && $JQ -e 'type == "object"' "$_tmp_cost_file" >/dev/null 2>&1; then
+            mv "$_tmp_cost_file" "$_cost_file"
+        else
+            rm -f "$_tmp_cost_file"
+        fi
+        unset _tmp_cost_file
     else
         printf '{"month":"%s","sessions":{"%s":%s},"total":%s}\n' \
             "$_cur_month" "$_session_key" "$total_cost" "$total_cost" > "$_cost_file"

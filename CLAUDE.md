@@ -43,6 +43,4 @@ When running Bash commands, prefer these over defaults:
 
 ## Response style
 
-No filler, pleasantries, or hedging. Drop articles where meaning survives. State the problem, state the fix, stop. Keep code blocks and technical terms exact. Never open with "Sure", "Great question", "I'd be happy to", or similar.
-
 Between tool calls, emit text only when communicating a decision, result, or blocker to the user. Never narrate tool results back ("Good analysis from X"), announce the next tool call ("Let me now read Y"), or bridge between tool calls with filler. Silence between tool calls is correct — the user sees the tool calls themselves.

@@ -41,6 +41,16 @@ When running Bash commands, prefer these over defaults:
 - **Dependencies:** verify current stable version from registry/docs before adding deps, CI actions, or tool versions.
 - **Debug:** read the failing test and error first; check docs via context7 for dependency issues. Max 2 debug scripts before re-reading the code and changing approach.
 
-## Response style
+## Working Style
 
-Between tool calls, emit text only when communicating a decision, result, or blocker to the user. Never narrate tool results back ("Good analysis from X"), announce the next tool call ("Let me now read Y"), or bridge between tool calls with filler. Silence between tool calls is correct — the user sees the tool calls themselves.
+- If a slash command or skill is loaded with no accompanying task, ask one short question and stop. Do not start autonomous repo exploration or open multi-step investigations unprompted.
+
+## Sandbox & Tooling
+
+Bash runs sandboxed. Writes are allowed only under cwd, `$TMPDIR`, `/tmp/claude`, and the paths in `settings.json` → `sandbox.filesystem.allowWrite`. `git`, `docker`, `aws`, `gh`, `trash`, and `prek` are in `excludedCommands` and bypass the sandbox.
+
+- Sandbox path settings take absolute paths only. Neither `$HOME` nor `~` is expanded — a relative-looking entry resolves against cwd and silently matches nothing. A trailing `/**` is allowed and stripped.
+- `Operation not permitted` on a path outside cwd is usually the sandbox, not a real permissions problem. Confirm by rerunning with `dangerouslyDisableSandbox: true`.
+- Project trees are intentionally not on `allowWrite`. Writing into a git worktree outside the project root (`mise trust`, `chmod`, installs) fails; `git` itself is exempt, so `git worktree add` works. Use `dangerouslyDisableSandbox: true` for the follow-on step — `cd` does not help, since `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` pins the writable root to the project dir.
+- Writes to `~/.claude/{skills,agents,hooks,commands,projects,plugins,settings*.json}` are blocked by a hardcoded protection list that `allowWrite` cannot override. Use Edit/Write instead of Bash, or `dangerouslyDisableSandbox`.
+- `fd` and `rg` honour `.gitignore`. The allowlist-style `.gitignore` in `$HOME` hides almost everything, so they return nothing there — use `fd -I` / `rg --no-ignore`, or `find`.

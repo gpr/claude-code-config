@@ -1,0 +1,49 @@
+{
+  "skill_name": "instructions-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "can you review this CLAUDE.md real quick, feels bloated: ~/.claude/CLAUDE.md",
+      "expected_output": "A review of ~/.claude/CLAUDE.md covering format conformance, per-section impact classification (load-bearing/redundant/inert), and token cost against Claude Code's built-in system prompt and behavior. Output includes a findings table (Location | Category | Problem | Evidence), explicit conflict/redundancy citations against always-loaded sources, a single full-file rewrite (no diff, no alternatives), a line-count delta with one-sentence rationale, and no closing summary. Since the target is not a SKILL.md, no evals.json check or skill-specific best-practices fetch occurs.",
+      "assertions": [
+        "Output contains a findings table with columns Location, Category, Problem, Evidence",
+        "Output contains a single rewritten full-file version of the CLAUDE.md, not a diff",
+        "Output reports a line-count delta (old count vs new count, or a signed delta) with a one-sentence rationale",
+        "Output does not mention evals.json or evals/ (only applicable to SKILL.md targets)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "/instructions-review ~/.claude/skills/incident/SKILL.md",
+      "expected_output": "A review of the incident skill that additionally fetches the Skills doc, the Agent Skills best-practices doc, and the evaluating-skills.md doc, checks for evals/evals.json next to the SKILL.md (none exists in this skill), and flags the missing evals file as a finding rather than treating it as a hard failure. The rest of the output follows the same structure: findings table, conflicts/redundancies with line citations against ~/.claude/CLAUDE.md and ~/.claude/skills/CLAUDE.md, a full-file rewrite, and a line-count delta with rationale.",
+      "assertions": [
+        "Findings table includes a row noting the absence of evals/evals.json for this skill",
+        "The missing evals.json is described as a finding/note, not phrased as a blocking failure",
+        "Conflicts/redundancies section cites specific line numbers from the target and from ~/.claude/skills/CLAUDE.md or ~/.claude/CLAUDE.md where relevant",
+        "Output ends without a closing summary paragraph"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Audit ~/.claude/rules/instructions.md for correctness — I want to know if the glob actually matches what it's supposed to and whether it's redundant with CLAUDE.md.",
+      "expected_output": "A review of the path-scoped rule file that explicitly verifies whether its frontmatter path globs (e.g. \"**/.claude/skills/**/*.md\", \"**/.claude/agents/*.md\", \"**/CLAUDE.md\") actually match the files they're intended to target, calling out any glob that is too broad, too narrow, or mismatched. It also checks the rule's content for redundancy against ~/.claude/CLAUDE.md and ~/.claude/skills/CLAUDE.md, since this rule loads alongside them for matching paths. Output follows the standard structure: findings table, conflicts/redundancies with citations, one rewrite, line-count delta with rationale.",
+      "assertions": [
+        "Output explicitly addresses whether each path glob in the frontmatter matches its intended target files",
+        "Findings table or conflicts section cites specific overlap or redundancy (if any) between this rule and ~/.claude/CLAUDE.md or ~/.claude/skills/CLAUDE.md by line number",
+        "Output provides exactly one full-file rewrite, not multiple alternative versions",
+        "Output does not reference evals.json or SKILL.md-specific best practices, since the target is a rules file, not a SKILL.md"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "/instructions-review ~/.claude/CLAUDE.md --fix",
+      "expected_output": "The full standard review of ~/.claude/CLAUDE.md is produced first (findings table, conflicts/redundancies with line citations, a single full-file rewrite, line-count delta with rationale, no closing summary), exactly as it would be without the flag. Then, because --fix was passed, a Sonnet subagent (Agent tool, subagent_type general-purpose, model sonnet) is launched to overwrite the file with the verbatim proposed rewrite via Write and report the path written. The flag is stripped from arguments before path parsing, so ~/.claude/CLAUDE.md is treated as the only target. If the rewrite equals the original, no agent is launched.",
+      "assertions": [
+        "The complete review output (findings table, conflicts/redundancies, full-file rewrite, line-count delta) is produced before any fix is applied",
+        "A subagent is launched with model sonnet to apply the fix, not applied inline by the reviewing session",
+        "The fix agent writes the verbatim proposed rewrite to the target file and does not re-review or make further edits",
+        "The --fix token is not treated as a file path; ~/.claude/CLAUDE.md is the only reviewed target"
+      ]
+    }
+  ]
+}

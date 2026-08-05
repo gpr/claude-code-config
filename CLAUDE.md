@@ -47,7 +47,9 @@ When running Bash commands, prefer these over defaults:
 
 ## Sandbox & Tooling
 
-Bash runs sandboxed. Writes are allowed only under cwd, `$TMPDIR`, `/tmp/claude`, and the paths in `settings.json` → `sandbox.filesystem.allowWrite`. `git`, `docker`, `aws`, `gh`, `trash`, and `prek` are in `excludedCommands` and bypass the sandbox.
+Bash runs sandboxed. Writes are allowed only under cwd, `$TMPDIR`, `/tmp/claude`, and the paths in `settings.json` → `sandbox.filesystem.allowWrite`. `git`, `docker`, `aws`, `gh`, `trash`, and `prek` are in `excludedCommands`, which exempts them from *command* approval — it does **not** grant them writes outside those paths.
+
+- Committing to a repo whose `.git` is outside the project root fails: from a `~/.claude` session, `git -C ~ add <file>` gives `Unable to create '/Users/gregory.rome/.git/index.lock': Operation not permitted`. Use `dangerouslyDisableSandbox: true` for that git call. Read-only git (`status`, `diff`, `log`) works fine.
 
 - Sandbox path settings take absolute paths only. Neither `$HOME` nor `~` is expanded — a relative-looking entry resolves against cwd and silently matches nothing. A trailing `/**` is allowed and stripped.
 - `Operation not permitted` on a path outside cwd is usually the sandbox, not a real permissions problem. Confirm by rerunning with `dangerouslyDisableSandbox: true`.

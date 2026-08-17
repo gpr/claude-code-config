@@ -215,16 +215,24 @@ elif [ -n "$ANTHROPIC_API_KEY" ]; then
     auth_badge=$(printf '\033[2mAPI key\033[0m')
 else
     _auth_email=""
-    for _f in "$HOME/.claude.json" "$HOME/.claude/config.json" "$HOME/.claude/.config.json"; do
+    # Multiple CLAUDE_CONFIG_DIR setups (different logins) can exist on this
+    # machine. When CLAUDE_CONFIG_DIR is set, read only that dir's config —
+    # never fall back to $HOME, or the badge shows the wrong account's email.
+    if [ -n "$CLAUDE_CONFIG_DIR" ]; then
+        _auth_files=("$CLAUDE_CONFIG_DIR/.claude.json" "$CLAUDE_CONFIG_DIR/config.json" "$CLAUDE_CONFIG_DIR/.config.json")
+    else
+        _auth_files=("$HOME/.claude.json" "$HOME/.claude/config.json" "$HOME/.claude/.config.json")
+    fi
+    for _f in "${_auth_files[@]}"; do
         if [ -f "$_f" ]; then
-            _auth_email=$(jq -r '.oauthAccount.emailAddress // .accountEmail // .email // empty' "$_f" 2>/dev/null)
+            _auth_email=$($JQ -r '.oauthAccount.emailAddress // .accountEmail // .email // empty' "$_f" 2>/dev/null)
             [ -n "$_auth_email" ] && break
         fi
     done
     if [ -n "$_auth_email" ]; then
         auth_badge=$(printf '\033[2m👤 %s\033[0m' "$_auth_email")
     fi
-    unset _f _auth_email
+    unset _auth_files _f _auth_email
 fi
 
 # LINE 1: [Model] [thinking] [effort] | auth | folder | branch
@@ -387,148 +395,3 @@ fi
 } # end _run
 
 _run
-: <<'_DEAD_CODE_EOF_'
-\u0000
-# Enterprise rate limit cache (API key users — skipped when claude.ai rate_limits present)
-enterprise_tok_pct=""
-_rl_cache="$HOME/.claude/cache/rate_limits.json"
-if [ -f "$_rl_cache" ]; then
-    read -r _cached_at _tok_pct < <(
-        $JQ -r '[.cached_at // 0, .tokens_pct // ""] | @tsv' "$_rl_cache" 2>/dev/null
-    )
-    _now=$(date +%s)
-    if [ "$(( _now - _cached_at ))" -le 300 ] 2>/dev/null; then
-        enterprise_tok_pct="$_tok_pct"
-    fi
-    unset _cached_at _tok_pct _now
-fi
-unset _rl_cache
-
-# Thinking indicator
-case "$thinking_enabled" in
-    true)  thinking_icon="🧠" ;;
-    false) thinking_icon="💤" ;;
-    *)     thinking_icon="" ;;
-esac
-
-# Effort badge (only when present)
-effort_badge=""
-if [ -n "$effort_level" ]; then
-    effort_cap="$(echo "$effort_level" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
-    case "$effort_level" in
-        low)    effort_glyph="○" ;;
-        medium) effort_glyph="◐" ;;
-        high)   effort_glyph="●" ;;
-        xhigh)  effort_glyph="◉" ;;
-        ultra)  effort_glyph="◎" ;;
-        *)      effort_glyph="◌" ;;
-    esac
-    effort_badge=$(printf ' %s %s' "$effort_glyph" "$effort_cap")
-fi
-
-# Auth / login info
-# Priority: ANTHROPIC_BASE_URL (custom endpoint) > ANTHROPIC_API_KEY (API key) > logged-in account
-auth_badge=""
-if [ -n "$ANTHROPIC_BASE_URL" ]; then
-    # Extract hostname from the URL (strip scheme and path)
-    base_host=$(echo "$ANTHROPIC_BASE_URL" | sed -E 's|^https?://([^/]+).*|\1|')
-    auth_badge=$(printf '\033[2m🔗 %s\033[0m' "$base_host")
-elif [ -n "$ANTHROPIC_API_KEY" ]; then
-    auth_badge=$(printf '\033[2mAPI key\033[0m')
-else
-    # Try to read logged-in account email from Claude Code's config
-    _auth_email=""
-    for _f in "$HOME/.claude.json" "$HOME/.claude/config.json" "$HOME/.claude/.config.json"; do
-        if [ -f "$_f" ]; then
-            _auth_email=$(jq -r '.oauthAccount.emailAddress // .accountEmail // .email // empty' "$_f" 2>/dev/null)
-            [ -n "$_auth_email" ] && break
-        fi
-    done
-    if [ -n "$_auth_email" ]; then
-        auth_badge=$(printf '\033[2m👤 %s\033[0m' "$_auth_email")
-    fi
-    unset _f _auth_email
-fi
-
-# LINE 1: [Model] [thinking] [effort] folder | branch
-line1=$(printf '\033[37m[%s]\033[0m' "$short_model")
-if [ -n "$thinking_icon" ]; then
-    line1="$line1 $thinking_icon"
-fi
-if [ -n "$effort_badge" ]; then
-    line1="${line1}$(printf '%b' "$effort_badge")"
-fi
-if [ -n "$auth_badge" ]; then
-    line1="$line1 $(printf '%b %b' "$SEP" "$auth_badge")"
-fi
-if [ -n "$github_url" ]; then
-    line1="$line1 $(printf '\033[94m🐙 %s 📁 \033[2m%s\033[0m' "$github_project" "$folder_name")"
-else
-    line1="$line1 $(printf '\033[94m📁 %s\033[0m' "$folder_name")"
-fi
-if [ -n "$git_branch" ]; then
-    git_diff_stats=""
-    [ "$git_staged" -gt 0 ] && git_diff_stats="$(printf '\033[32m+%s\033[0m' "$git_staged")"
-    [ "$git_modified" -gt 0 ] && git_diff_stats="${git_diff_stats}$(printf '\033[33m~%s\033[0m' "$git_modified")"
-    if [ -n "$worktree_branch" ]; then
-        line1="$line1 $(printf '%b \033[96m🌿 %s\033[0m%b \033[2m⤴ %s\033[0m' "$SEP" "$git_branch" "${git_diff_stats:+ $git_diff_stats}" "$worktree_branch")"
-    else
-        line1="$line1 $(printf '%b \033[96m🌿 %s\033[0m%b' "$SEP" "$git_branch" "${git_diff_stats:+ $git_diff_stats}")"
-    fi
-fi
-
-# LINE 2: Progress bar | Context % | rate limits | cache hit %
-line2=""
-if [ -n "$progress_bar" ]; then
-    line2=$(printf '%b' "$progress_bar")
-fi
-if [ -n "$ctx_pct" ]; then
-    if [ -n "$line2" ]; then
-        line2="$line2 $(printf '\033[37m%s\033[0m' "$ctx_pct")"
-    else
-        line2=$(printf '\033[37m%s\033[0m' "$ctx_pct")
-    fi
-fi
-# Total cumulative token consumption
-if [ -n "$total_tokens" ] && [ "$total_tokens" != "0" ] 2>/dev/null; then
-    if [ "$total_tokens" -ge 1000000 ] 2>/dev/null; then
-        tok_display=$(awk "BEGIN {printf \"%.1fM\", $total_tokens/1000000}")
-    elif [ "$total_tokens" -ge 1000 ] 2>/dev/null; then
-        tok_display=$(awk "BEGIN {printf \"%.0fk\", $total_tokens/1000}")
-    else
-        tok_display="${total_tokens}"
-    fi
-    if [ -n "$line2" ]; then
-        line2="$line2 $(printf '%b \033[2m%s tok\033[0m' "$SEP" "$tok_display")"
-    else
-        line2=$(printf '\033[2m%s tok\033[0m' "$tok_display")
-    fi
-fi
-# Session cost (USD)
-if [ -n "$total_cost" ]; then
-    cost_display=$(awk "BEGIN {printf \"\$%.2f\", $total_cost}")
-    if [ -n "$line2" ]; then
-        line2="$line2 $(printf '%b \033[33m💰 %s\033[0m' "$SEP" "$cost_display")"
-    else
-        line2=$(printf '\033[33m💰 %s\033[0m' "$cost_display")
-    fi
-fi
-# Rate limits (only shown when present, i.e., Claude.ai subscribers)
-if [ -n "$five_hour_pct" ]; then
-    five_int=$(printf '%.0f' "$five_hour_pct")
-    if [ -n "$line2" ]; then
-        line2="$line2 $(printf '%b \033[35m5h:%s%%\033[0m' "$SEP" "$five_int")"
-    else
-        line2=$(printf '\033[35m5h:%s%%\033[0m' "$five_int")
-    fi
-fi
-if [ -n "$seven_day_pct" ]; then
-    week_int=$(printf '%.0f' "$seven_day_pct")
-    if [ -n "$line2" ]; then
-        line2="$line2 $(printf '\033[35m7d:%s%%\033[0m' "$week_int")"
-    else
-        line2=$(printf '\033[35m7d:%s%%\033[0m' "$week_int")
-    fi
-fi
-_DEAD_CODE_EOF_
-

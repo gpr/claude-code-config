@@ -1,11 +1,12 @@
 ---
 paths:
   - "**/.claude/skills/**/*.md"
-  - "**/.claude/agents/*.md"
+  - "**/.claude/agents/**/*.md"
+  - "**/.claude/rules/**/*.md"
   - "**/CLAUDE.md"
 ---
 
-# Authoring guidelines for skills, agents, and CLAUDE.md
+# Authoring guidelines for skills, agents, rules, and CLAUDE.md
 
 ## Token discipline
 
@@ -29,7 +30,6 @@ Recent Claude models are highly instruction-responsive — strong language overt
 
 ## Structure
 
-- Use markdown headers to separate sections.
 - Use XML tags (`<example>`, `<context>`) when mixing instructions, input data, and examples.
 - Keep examples close to the rule they illustrate.
 

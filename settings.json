@@ -14,10 +14,6 @@
   "includeGitInstructions": false,
   "permissions": {
     "allow": [
-      "Task",
-      "Edit",
-      "MultiEdit",
-      "Write",
       "WebSearch",
       "TodoWrite",
       "ExitPlanMode",
@@ -29,6 +25,8 @@
       "Bash(ls:*)",
       "Bash(prek run:*)",
       "Bash(trash:*)",
+      "Bash(terraform validate *)",
+      "Bash(terraform plan *)",
       "mcp__plugin_repomix-mcp_repomix__*",
       "WebFetch(domain:json.schemastore.org)",
       "WebFetch(domain:github.com)",
@@ -86,22 +84,8 @@
       "WebFetch(domain:docs.readthedocs.com)",
       "WebFetch(domain:diataxis-template.readthedocs.io)",
       "WebFetch(domain:gist.github.com)",
-      "Bash(rtk ls:*)",
-      "Edit(~/.claude/skills/opsx-tdd/**)",
-      "Bash(rtk grep:*)",
-      "Bash(rtk read:*)",
-      "Bash(rtk cat:*)",
-      "Bash(rtk git:*)",
-      "Bash(rtk rg:*)",
-      "Bash(rtk find:*)",
-      "Edit(~/.claude/skills/opsx-team-tdd/**)",
-      "Edit(~/.claude/skills/opqw-tdd-v2/**)",
-      "Read(/Users/gregory.rome/**)",
-      "Bash(./scripts/validate_managed_settings.py)",
-      "Bash(terraform validate *)",
       "mcp__incident_io__*",
-      "Skill(incident)",
-      "Bash(python3 -m json.tool .mcp.json)"
+      "Skill(incident)"
     ],
     "deny": [
       "Bash(ssh:*)",
@@ -122,11 +106,6 @@
       "Bash(curl *| sh *)",
       "Bash(curl *|zsh*)",
       "Bash(curl *| zsh*)",
-      "Bash(bash <*)",
-      "Bash(sh <*)",
-      "Bash(zsh <*)",
-      "Bash(. <*)",
-      "Bash(source <*)",
       "Bash(git push -f*)",
       "Bash(git push* -f)",
       "Bash(git push* -f *)",
@@ -139,13 +118,7 @@
       "Edit(~/.ssh/**)",
       "Read(~/.ssh/**)",
       "Read(~/.gnupg/**)",
-      "Read(~/.secret_envs)",
-      "Read(~/.netrc)",
-      "Read(~/.config/gcloud/**)",
-      "Read(~/.terraform.d/**)",
-      "Read(~/.aws/credentials)",
-      "Read(~/.aws/sso/**)",
-      "Read(~/.aws/cli/cache/**)",
+      "Read(~/.aws/**)",
       "Read(~/.azure/**)",
       "Edit(~/.config/gh/**)",
       "Read(~/.config/gh/**)",
@@ -166,7 +139,7 @@
       "Read(~/Library/Application Support/**/phantom*/**)",
       "Read(~/Library/Application Support/**/solflare*/**)"
     ],
-    "defaultMode": "plan"
+    "defaultMode": "auto"
   },
   "model": "opus",
   "enableAllProjectMcpServers": false,
@@ -187,16 +160,62 @@
         "hooks": [
           {
             "type": "command",
-            "command": "rtk hook claude"
+            "command": "CMD=$(jq -r '.tool_input.command'); case \"$CMD\" in grep\\ *|grep) echo 'BLOCKED: Use the Grep tool or rg instead of grep' >&2; exit 2;; head\\ *|head) echo 'BLOCKED: Use the Read tool instead of head' >&2; exit 2;; tail\\ *|tail) echo 'BLOCKED: Use the Read tool instead of tail' >&2; exit 2;; esac"
           }
         ]
-      },
+      }
+    ],
+    "SessionStart": [
       {
-        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "CMD=$(jq -r '.tool_input.command'); case \"$CMD\" in grep\\ *|grep) echo 'BLOCKED: Use the Grep tool or rg instead of grep' >&2; exit 2;; head\\ *|head) echo 'BLOCKED: Use the Read tool instead of head' >&2; exit 2;; tail\\ *|tail) echo 'BLOCKED: Use the Read tool instead of tail' >&2; exit 2;; esac"
+            "command": "/opt/gregory.rome/workspaces/security-team/iterm2-claude-sessions/.venv/bin/cciterm hooks session-start",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/gregory.rome/workspaces/security-team/iterm2-claude-sessions/.venv/bin/cciterm hooks notification",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/gregory.rome/workspaces/security-team/iterm2-claude-sessions/.venv/bin/cciterm hooks stop",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/gregory.rome/workspaces/security-team/iterm2-claude-sessions/.venv/bin/cciterm hooks user-prompt-submit",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/gregory.rome/workspaces/security-team/iterm2-claude-sessions/.venv/bin/cciterm hooks session-end",
+            "timeout": 5
           }
         ]
       }
@@ -205,12 +224,15 @@
   "worktree": {
     "baseRef": "fresh"
   },
+  "disableAgentView": false,
+  "enableWorkflows": true,
   "statusLine": {
     "type": "command",
-    "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/scripts/statusline.sh\""
+    "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/scripts/statuslines.sh\"",
+    "refreshInterval": 5
   },
   "enabledPlugins": {
-    "agent-sdk-dev@claude-plugins-official": true,
+    "agent-sdk-dev@claude-plugins-official": false,
     "atlassian@claude-plugins-official": false,
     "clangd-lsp@claude-plugins-official": false,
     "claude-code-setup@claude-plugins-official": true,
@@ -222,14 +244,14 @@
     "feature-dev@claude-plugins-official": false,
     "figma@claude-plugins-official": false,
     "firebase@claude-plugins-official": false,
-    "frontend-design@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": false,
     "gopls-lsp@claude-plugins-official": false,
     "hookify@claude-plugins-official": false,
     "jdtls-lsp@claude-plugins-official": false,
     "playwright@claude-plugins-official": false,
     "plugin-dev@claude-plugins-official": true,
-    "pr-review-toolkit@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true,
+    "pr-review-toolkit@claude-plugins-official": false,
+    "pyright-lsp@claude-plugins-official": false,
     "remember@claude-plugins-official": false,
     "repomix-commands@repomix": true,
     "repomix-explorer@repomix": true,
@@ -241,13 +263,22 @@
     "skill-creator@claude-plugins-official": false,
     "slack@claude-plugins-official": false,
     "terraform@claude-plugins-official": false,
-    "typescript-lsp@claude-plugins-official": false
+    "typescript-lsp@claude-plugins-official": false,
+    "okf-core@okf-cc-plugins": true,
+    "claude-security@claude-plugins-official": true,
+    "cocoindex-code@cocoindex-code": false
   },
   "extraKnownMarketplaces": {
     "gpr-plugins": {
       "source": {
         "source": "directory",
-        "path": "$HOME/workspaces/gpr/claude-plugins"
+        "path": "/opt/gregory.rome/workspaces/gpr/claude-plugins"
+      }
+    },
+    "okf-cc-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "gpr/okf-claude-code-plugins"
       }
     }
   },
@@ -318,15 +349,17 @@
       ],
       "allowUnixSockets": [
         "/var/run/docker.sock",
-        "/Users/gregory.rome/.orbstack/run/docker.sock",
-        "/Users/gregory.rome/Library/Containers/com.maxgoedjen.Secretive.SecretAgent/Data/socket.ssh"
+        "$HOME/.orbstack/run/docker.sock"
       ],
       "allowLocalBinding": true
     },
     "filesystem": {
+      "allowRead": [
+        "$HOME/.cache",
+        "$HOME/.config"
+      ],
       "allowWrite": [
-        "/Users/gregory.rome/.cache/uv",
-        "/Users/gregory.rome/.local/state/mise"
+      "$HOME/.cache"
       ]
     },
     "excludedCommands": [
@@ -343,12 +376,11 @@
   "promptSuggestionEnabled": false,
   "awaySummaryEnabled": false,
   "autoUpdatesChannel": "latest",
-  "plansDirectory": ".claude/plans",
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": false,
   "skipWorkflowUsageWarning": true,
   "theme": "auto",
-  "switchModelsOnFlag": false,
+  "switchModelsOnFlag": true,
   "fileCheckpointingEnabled": false,
   "teammateMode": "auto",
   "remoteControlAtStartup": false,

@@ -1,9 +1,8 @@
 ---
 name: incident
-description: incident.io assistant for working with incidents. View incident details, post updates to incident channels, interact with the incident agent, and query structured incident data. Use when the user mentions an incident ID (e.g., "INC-123"), asks about an incident, uses the /incident command, or is otherwise acting on an incident.
-author: Claude Code
-version: 1.0.0
-date: 2026-07-22
+description: incident.io assistant for working with incidents. View incident details, post updates to incident channels, interact with the incident agent, and query structured incident data. Use whenever the user mentions an incident ID (e.g., "INC-123"), asks about an incident, or uses the /incident command. Trigger proactively when you see an incident reference.
+allowed-tools:
+  - Read
 ---
 
 # incident.io
@@ -24,9 +23,8 @@ Activate this skill when the user:
 - Wants to share findings back to an incident
 - Says "@incident" followed by any request
 
-**Important**: Trigger this skill when the user is acting on or asking about
-an incident — you don't need an explicit `/incident` invocation. Don't fire on
-incidental `INC-`-shaped strings in unrelated discussion.
+**Important**: Trigger this skill proactively whenever you see an incident
+reference — don't wait for explicit requests.
 
 ## Quick Start (Decision Tree)
 
@@ -56,6 +54,10 @@ escalations, selecting incidents to investigate, picking from suggested actions)
 use the `AskUserQuestion` tool to power the interaction. This gives the user a
 structured selection experience rather than requiring them to type their choice
 as free text.
+# incident.io Investigation Guide
+
+You have access to incident.io's tools for investigating incidents.
+Here's how to use them effectively.
 
 ## Requirements
 
@@ -134,8 +136,12 @@ switching to an unrelated topic.
 
 ### Step 1: Find the incident
 
-Follow the decision tree in **Quick Start** to determine which incident to
-work on. When no ID is provided and you fall back to `escalations_list`:
+**If user mentions an incident ID**, skip to step 2.
+
+**If user says "my incident"**, use `incident_pin` with no arguments to
+check their currently pinned incident. If one is pinned, skip to step 3.
+
+**If no incident ID**, use `escalations_list` to find relevant incidents:
 
 1. Look at the output for the current user's email and `← YOU` markers
 2. Present a brief, single-line summary of the top 3-5 incidents:
@@ -402,7 +408,7 @@ automatically. Use `incident_pin()` to get the current incident ID.
    `incident_pin()` to check what they're pinning
 2. **Pin first** — Use `incident_pin` to set your active incident
    before reading files
-3. **Expand @incident requests** — The backend agent can't see your
+8. **Expand @incident requests** — The backend agent can't see your
    session. Translate the user's request into a self-contained question
    with the relevant details from your session
 

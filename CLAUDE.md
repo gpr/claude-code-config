@@ -41,6 +41,16 @@ When running Bash commands, prefer these over defaults:
 - **Dependencies:** verify current stable version from registry/docs before adding deps, CI actions, or tool versions.
 - **Debug:** read the failing test and error first; check docs via context7 for dependency issues. Max 2 debug scripts before re-reading the code and changing approach.
 
+## Bash Retry Logging
+
+When a Bash command's output causes you to issue a different follow-up Bash command (retry, refined query, alternate approach — not a plain re-run), append one line to `~/.claude/logs/bash-retry.jsonl` before running the new command:
+
+```
+echo '{"ts":"<ISO8601>","prev_command":"<...>","new_command":"<...>","reason":"<why the output triggered this>"}' >> ~/.claude/logs/bash-retry.jsonl
+```
+
+Skip this for routine multi-step workflows (e.g. `mkdir` then `cd`) — only log when the prior output's content (error, empty result, unexpected format) drove the change.
+
 ## Working Style
 
 - If a slash command or skill is loaded with no accompanying task, ask one short question and stop. Do not start autonomous repo exploration or open multi-step investigations unprompted.

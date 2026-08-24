@@ -1,0 +1,5 @@
+No content changes needed — file already reads as I quoted it above.
+
+**Line-count delta: 0.** Rationale: every line is specific and non-default (numeric thresholds, non-obvious tool preferences, project-specific commit taxonomy) — nothing meets the "would removing this cause a mistake?" cut bar from the best-practices doc.
+
+Next action: if the bloat feeling persists, it's the 3-file CLAUDE.md stack (this + `~/CLAUDE.md` + `~/.claude/skills/CLAUDE.md`), not this file — want me to review those two next?

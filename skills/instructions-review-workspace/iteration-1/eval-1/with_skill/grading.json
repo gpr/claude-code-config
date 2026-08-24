@@ -1,0 +1,30 @@
+{
+  "assertion_results": [
+    {
+      "text": "Output contains a findings table with columns Location, Category, Problem, Evidence",
+      "passed": false,
+      "evidence": "The response contains no table at all \u2014 just two short prose paragraphs (\"Line-count delta: 47 \u2192 42 lines...\" and \"Rest of the file...\"). No columns named Location, Category, Problem, or Evidence appear anywhere."
+    },
+    {
+      "text": "Output contains a single rewritten full-file version of the CLAUDE.md, not a diff",
+      "passed": false,
+      "evidence": "The response never includes the file content \u2014 rewritten or otherwise. It only describes the change in prose (\"Removed the `## Response style` section\") without showing any file text, diff, or full rewrite."
+    },
+    {
+      "text": "Output reports a line-count delta (old count vs new count, or a signed delta) with a one-sentence rationale",
+      "passed": true,
+      "evidence": "\"**Line-count delta:** 47 \u2192 42 lines (\u22125). Removed the `## Response style` section \u2014 it was a verbatim duplicate of your ADHD output style's rule 10, costing tokens twice every session for no behavioral change.\" gives both the count and a one-sentence rationale."
+    },
+    {
+      "text": "Output does not mention evals.json or evals/ (only applicable to SKILL.md targets)",
+      "passed": true,
+      "evidence": "No occurrence of 'evals.json' or 'evals/' anywhere in the response text."
+    }
+  ],
+  "summary": {
+    "passed": 2,
+    "failed": 2,
+    "total": 4,
+    "pass_rate": 0.5
+  }
+}

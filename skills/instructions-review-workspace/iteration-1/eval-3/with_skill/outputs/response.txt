@@ -1,0 +1,79 @@
+## Sources checked
+- Target: `~/.claude/rules/instructions.md`
+- `code.claude.com/docs/en/skills.md` (paths frontmatter field spec)
+- `code.claude.com/docs/en/memory` (path-specific rules / `.claude/rules/` spec)
+- `code.claude.com/docs/en/best-practices.md` (CLAUDE.md authoring guidance)
+- `~/.claude/CLAUDE.md`, `/Users/gregory.rome/CLAUDE.md`, `~/.claude/skills/CLAUDE.md` (always-loaded, checked for overlap — none found)
+
+Not a SKILL.md, so no evals check applies.
+
+## Findings table
+
+| Location | Category | Problem | Evidence |
+|---|---|---|---|
+| Line 3, `**/.claude/skills/**/*.md` | Format / scope | Matches every `.md` under any skill dir — `resources/*.md`, `examples/*.md`, not just the `SKILL.md` definition file the rule is written for | The rule's own H1 says "Authoring guidelines for **skills**..." implying the skill definition, but the glob fires on any supporting doc too |
+| Line 4 vs Line 3 | Consistency | Skills glob uses `**/*.md` (any depth); agents glob uses flat `*.md` (one level) — no stated reason for the asymmetry | Lines 3–4 of target |
+| Frontmatter (all 3 paths) | Cost / Format | Undocumented whether `paths` matching for a **user-level** rule (`~/.claude/rules/`) anchors on absolute path or cwd-relative path — this rule lives outside any project, so its own trigger behavior against `~/.claude/skills/...` files is unverified | `memory.md`'s path-specific-rules section only gives project-relative examples (`src/**/*.ts`); absolute-path matching is stated explicitly only for `claudeMdExcludes`, not for `paths` |
+| Line 32 | Impact / Inert | "Use markdown headers to separate sections" restates default model/doc behavior, not a decision this file needs to encode | Matches `best-practices.md` → "Write effective instructions → Structure: use markdown headers and bullets" almost verbatim |
+
+## Conflicts and redundancies
+
+- Line 32 of target duplicates the "Structure" bullet in `code.claude.com/docs/en/memory` → *Write effective instructions*, which already tells Claude to use headers/bullets — carrying no additional instruction weight.
+- No conflicts found against `~/.claude/CLAUDE.md`, `/Users/gregory.rome/CLAUDE.md`, or `~/.claude/skills/CLAUDE.md` — none of those cover skill/agent-authoring style, so this file adds new, non-overlapping guidance.
+
+## Glob verdict
+
+`**/CLAUDE.md` and `**/.claude/agents/*.md` are correctly scoped for their documented purpose. `**/.claude/skills/**/*.md` is over-broad relative to the rule's stated intent (skill *definition* authoring) — winner: narrow it to `**/.claude/skills/*/SKILL.md`, since the file's content (token discipline, tone, anti-patterns) is written for the definition file, not for arbitrary resource docs shipped alongside a skill.
+
+## Rewrite
+
+```markdown
+---
+paths:
+  - "**/.claude/skills/*/SKILL.md"
+  - "**/.claude/agents/*.md"
+  - "**/CLAUDE.md"
+---
+
+# Authoring guidelines for skills, agents, and CLAUDE.md
+
+## Token discipline
+
+- Delete any sentence that restates what the surrounding structure already implies.
+- Prefer tables and bullet lists over prose for parallel information.
+- If a rule needs justification, add a single "Why:" line — not a paragraph.
+
+## Specificity
+
+- State concrete, verifiable instructions. "Run `npm test` before committing" — not "test your changes."
+- Name exact files, tools, flags, or patterns. Avoid "appropriate", "relevant", "as needed."
+- When describing skill triggers, list literal phrases users say.
+
+## Tone calibration
+
+Recent Claude models are highly instruction-responsive — strong language overtriggers.
+
+- Use normal imperative sentences. Reserve `MUST` / `NEVER` for irreversible or security-critical rules.
+- Drop anti-laziness nudges ("be thorough", "don't skip steps") — they cause overengineering.
+- Remove "if in doubt, use [tool]" — overtriggers on current models.
+
+## Structure
+
+- Use XML tags (`<example>`, `<context>`) when mixing instructions, input data, and examples.
+- Keep examples close to the rule they illustrate.
+
+## Anti-patterns
+
+| Avoid | Replace with |
+|-------|-------------|
+| "Apply best practices" | State the specific practices |
+| "CRITICAL: YOU MUST always..." | Direct imperative: "Always..." |
+| Explaining what Claude is | Instructions for what Claude does |
+| Rules for hypothetical edge cases | Rules for observed problems only |
+```
+
+## Line-count delta
+
+44 → 42 lines (−2). One glob line narrowed (no line-count change), the redundant "use markdown headers" bullet removed. Rationale: tightens the skills-glob to the file it's actually authored for, and drops an instruction that duplicates baseline doc guidance without adding behavioral value.
+
+**Next action:** the absolute-vs-relative path-matching question (finding 3) can't be resolved by reading docs — confirm by adding a throwaway line to this rule and checking `/context` after Claude reads a matching `SKILL.md` in a real project.

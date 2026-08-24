@@ -1,0 +1,72 @@
+Rewrite saved: `~/.claude/skills/instructions-review-workspace/incident-SKILL-rewrite.md` (178 lines vs 442).
+
+**Always-loaded sources checked:** `~/.claude/CLAUDE.md`, `~/CLAUDE.md`, `~/.claude/skills/CLAUDE.md`, `memory/MEMORY.md`, ADHD output style, Teads org instructions, Claude Code system prompt, and the `mcp__incident_io__*` tool schemas (loaded alongside the skill). No `evals/` directory exists.
+
+## 1. Findings table
+
+| Location | Category | Problem | Evidence |
+|---|---|---|---|
+| L4–5 | Format | `allowed-tools: [Read]` pre-approves a tool that needs no grant and covers none of the ~24 `mcp__incident_io__*` tools the body calls. Zero effect. | skills.md L419: "grants permission for the listed tools… It does not restrict which tools are available." |
+| L34–48, 71–101 (all tool refs) | Format | Bare tool names (`incident_pin`, `ask_incident`). Real names are `mcp__incident_io__incident_pin`. | best-practices.md, *MCP tool references*: "always use fully qualified tool names to avoid 'tool not found' errors." |
+| L57–61 | Format | Second `# ` H1 and a fresh "You have access to…" orientation mid-file. Two documents concatenated with no separator. | L8 `# incident.io`, L57 `# incident.io Investigation Guide` |
+| L97, 100 | Load-bearing but broken | "Read `config://organisation`" — the `Read` tool cannot fetch MCP resources; needs `ReadMcpResourceTool(server=…, uri=…)`. | ReadMcpResourceTool schema |
+| — | Load-bearing, missing | `telemetry://datasources` never mentioned, though both agent tools ask for it. | `ask`/`ask_incident` schemas: "Please read the telemetry://datasources resource" |
+| L68–133 (66 lines) | Redundant | Re-documents 24 tool schemas that load with the tools. | See §2 for line-by-line |
+| L29–48 vs L136–191 vs L405–413 vs L415–434 | Redundant | The same find→pin→summarise→post workflow stated **four** times. | 4 sections, ~70 lines, identical substance |
+| L382–393 | Redundant | "Division of Labor" restates L104–117 + L272–279 — third statement of `ask` vs `ask_incident` vs `incident_message`. | — |
+| L62–66 vs L436–442 | Redundant | "Requirements" and "Troubleshooting" both say auth errors → reauthenticate in the macOS app. | — |
+| L13–27 (15 lines) | Inert | "When to Use" restates the `description`. Trigger criteria only matter pre-load, and only `description` is pre-loaded; once the body is in context this changes nothing. | best-practices.md: "Metadata pre-loaded… Claude reads SKILL.md only when the Skill becomes relevant" |
+| L405–413 | Format | Tips numbered 1, 2, **8**. | L407, L410, L411 |
+| L344–351 | Load-bearing, broken | ASCII box with `[accept] [decline] [update]` renders as an inert code block — the "buttons" aren't clickable. Borders also misaligned (L347 has a stray space). | Contradicts L50–56, which mandates `AskUserQuestion` |
+| L326 | **Conflict** | "@incident change status to resolved → Verify it's appropriate, then use `ask_incident`" — self-verification on an external mutation. | See §2 |
+| L10, 59, 383 | Inert | "This skill helps you…", "You have access to… Here's how to use them effectively", "**You (the AI agent)**" — meta-commentary about what the file is. | best-practices.md: "Does this paragraph justify its token cost?" |
+| L44/71/144 vs L91 | Format | Uses both `escalations_list` and `escalation_list` without ever noting they're different tools. | best-practices.md: "Use consistent terminology" |
+| whole file | Cost | 436-line body, 17.1 KB, zero supporting files — no progressive disclosure despite four clearly separable reference blocks. | best-practices.md: split when approaching 500 lines |
+| n/a | Evals | No `evals/evals.json`. Output quality is unvalidated; there is no baseline showing the skill beats the raw tool schemas. | `ls evals` → No such file or directory |
+
+## 2. Conflicts and redundancies
+
+**Conflict — L326 loses to `~/.claude/CLAUDE.md`.** L326 tells Claude to "verify it's appropriate, then use `ask_incident`" for a status change. `~/.claude/CLAUDE.md` (*Philosophy*) says "**Ask first on big decisions** — ask before … external API mutations." Resolving an incident is an external mutation visible to the responder team. **CLAUDE.md wins**: confirm with the user, don't self-certify. Compounding this, L291 calls "change status to resolved" *"already self-contained and doesn't need expansion"*, which reads as licence to fire it off. The rewrite replaces both with a single "Mutations need the user's word" section.
+
+**Conflict — L344–351 loses to L50–56.** L50–56 mandates `AskUserQuestion` for selections; L344–351 hand-rolls a fake button box. **`AskUserQuestion` wins** — it's a real interaction; the box is decoration.
+
+**Redundant against the `incident_io` tool schemas** (these load with the tools, so the skill pays twice):
+- L80–83 duplicates `incident_show`'s description: *"For investigation or root cause analysis, request include: ["investigation", "postmortem"] — the default response without these only gives you the basic metadata."*
+- L121–133 (13 lines on `session_id`) duplicates `ask_incident`: *"Returns a session_id: reuse it in follow-up calls so the agent keeps context and can act on previous answers."*
+- L37–41 and L407–408 duplicate `incident_pin`: *"When the user asks about 'my incident', 'the incident', or 'pinned incident', check this first — it returns their active incident directly without needing to search."*
+- L44 and L144 duplicate `escalations_list`: *"Use this to find which incident to investigate."*
+- L181–182, L188–191, L211–214 duplicate `incident_message`: *"Requires the user's explicit approval… Never post your own findings, conclusions, or status updates unprompted… Use --message for a brief summary (1-2 sentences) and --thread-message for detailed explanations."*
+- L97 duplicates `escalation_list`: *"see config://organisation for IDs"*.
+
+**Redundant against `~/.claude/CLAUDE.md`:** nothing beyond the L326 conflict — the two files barely overlap in subject.
+
+**Not redundant, kept intact:** the hedging/attribution rules (L196–210) and the confirmed-vs-investigating example pair (L233–250). No tool schema or always-loaded source covers "preserve the user's level of certainty" or "prefer 'the issue' over 'root cause'". This is the highest-value content in the file.
+
+## 3. Rewrite
+
+Full replacement is at `~/.claude/skills/instructions-review-workspace/incident-SKILL-rewrite.md`. Structure:
+
+```
+frontmatter        name, description (expanded, third-person), allowed-tools
+                   (18 read-only MCP tools + ReadMcpResourceTool; mutating
+                   tools omitted with a comment saying the omission is
+                   deliberate)
+# incident.io      one line: tools are mcp__incident_io__<name>, read schemas
+## Find the incident        3-branch decision tree, AskUserQuestion
+## MCP resources            ReadMcpResourceTool + the 3 URIs
+## Which tool               data vs incident_message vs ask_incident vs ask,
+                            + session_id in 2 lines
+## Mutations need the user's word     the CLAUDE.md-aligned rule
+## Expanding @incident requests       kept, with the worked example
+## Suggestions              AskUserQuestion, field mappings, accept/decline
+## Writing channel messages hedging rules + formatting + both examples
+## Presenting data in chat  kept verbatim in substance
+## Pull requests            kept
+## When things fail         merged Requirements + Troubleshooting
+```
+
+## 4. Line-count delta
+
+**442 → 178 lines (−264, −60%).** Cut is almost entirely the four duplicated workflow statements, the 66-line re-documentation of tool schemas that ship with the tools, and the `description`-restating "When to Use" block; the two things the skill uniquely contributes — the write-as-the-user tone rules and the suggestion-handling protocol — survive in full, and `allowed-tools` goes from decorative to actually granting the read-only tools while leaving every live-incident mutation behind a prompt.
+
+Next action: `diff` the two files side by side — `code --diff ~/.claude/skills/incident/SKILL.md ~/.claude/skills/instructions-review-workspace/incident-SKILL-rewrite.md`.

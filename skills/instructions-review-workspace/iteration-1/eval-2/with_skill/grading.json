@@ -1,0 +1,30 @@
+{
+  "assertion_results": [
+    {
+      "text": "Findings table includes a row noting the absence of evals/evals.json for this skill",
+      "passed": true,
+      "evidence": "Table row: \"No `evals/evals.json` | Evals | Output quality is unvalidated. Highest-risk content is the hedging/tone block (L193\u2013231)... | `ls -1a` \u2192 `SKILL.md` only\""
+    },
+    {
+      "text": "The missing evals.json is described as a finding/note, not phrased as a blocking failure",
+      "passed": true,
+      "evidence": "Framed neutrally: \"No `evals/` \u2014 directory contains only `SKILL.md`\" and table entry says \"Output quality is unvalidated\" \u2014 no language like 'must fix', 'blocking', or 'fails' attached to it."
+    },
+    {
+      "text": "Conflicts/redundancies section cites specific line numbers from the target and from ~/.claude/skills/CLAUDE.md or ~/.claude/CLAUDE.md where relevant",
+      "passed": false,
+      "evidence": "Section 2 ('Conflicts and redundancies') only cites line numbers within the target SKILL.md (e.g. 'L4\u20136 vs skills.md L419', 'L112\u2013113 duplicates L392\u2013393', 'L13\u201327 duplicates L3'). None of its bullets cite a line number inside ~/.claude/skills/CLAUDE.md or ~/.claude/CLAUDE.md \u2014 the only reference to skills/CLAUDE.md appears in the Section 1 findings table ('marked Required by `~/.claude/skills/CLAUDE.md`') without any line number, and that's outside the conflicts/redundancies section."
+    },
+    {
+      "text": "Output ends without a closing summary paragraph",
+      "passed": true,
+      "evidence": "Response ends with 'Next action: open `~/.claude/settings.json` and check whether `permissions.allow` already contains an `mcp__incident_io` entry.' preceded by a substantive caveat about git-tracking, not a recap of completed work."
+    }
+  ],
+  "summary": {
+    "passed": 3,
+    "failed": 1,
+    "total": 4,
+    "pass_rate": 0.75
+  }
+}

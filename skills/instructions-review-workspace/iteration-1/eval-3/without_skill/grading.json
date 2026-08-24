@@ -1,0 +1,30 @@
+{
+  "assertion_results": [
+    {
+      "text": "Output explicitly addresses whether each path glob in the frontmatter matches its intended target files",
+      "passed": false,
+      "evidence": "The response only says 'added a `.claude/rules/**/*.md` path, made agents glob recursive' \u2014 it asserts changes were made but never shows verification of what each existing glob (e.g. `**/.claude/skills/**/*.md`, `**/.claude/agents/*.md`, `**/CLAUDE.md`) actually matches on disk. No check of matched files, no per-glob analysis."
+    },
+    {
+      "text": "Findings table or conflicts section cites specific overlap or redundancy (if any) between this rule and ~/.claude/CLAUDE.md or ~/.claude/skills/CLAUDE.md by line number",
+      "passed": false,
+      "evidence": "No findings table and no line-number citations appear anywhere in the response. The only redundancy statement is the unsupported claim 'no change to the load-bearing content, which was already well-scoped and non-redundant with CLAUDE.md' \u2014 asserted, not cited."
+    },
+    {
+      "text": "Output provides exactly one full-file rewrite, not multiple alternative versions",
+      "passed": false,
+      "evidence": "The response text contains no rewrite content at all \u2014 no code block, no full file shown. Only a line-count delta and rationale are given; there is no evidence a rewrite was produced or presented."
+    },
+    {
+      "text": "Output does not reference evals.json or SKILL.md-specific best practices, since the target is a rules file, not a SKILL.md",
+      "passed": true,
+      "evidence": "The response makes no mention of 'evals.json' or SKILL.md-specific concepts anywhere in the text: 'Line-count delta... Rationale... Next action: run `git diff ~/.claude/rules/instructions.md`...'"
+    }
+  ],
+  "summary": {
+    "passed": 1,
+    "failed": 3,
+    "total": 4,
+    "pass_rate": 0.25
+  }
+}

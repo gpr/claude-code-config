@@ -1,0 +1,30 @@
+{
+  "assertion_results": [
+    {
+      "text": "Output explicitly addresses whether each path glob in the frontmatter matches its intended target files",
+      "passed": true,
+      "evidence": "Findings table rows analyze each glob: '**/.claude/skills/**/*.md ... Matches every .md under any skill dir', 'Skills glob uses **/*.md (any depth); agents glob uses flat *.md', and the 'Glob verdict' section states '`**/CLAUDE.md` and `**/.claude/agents/*.md` are correctly scoped for their documented purpose. `**/.claude/skills/**/*.md` is over-broad relative to the rule's stated intent'."
+    },
+    {
+      "text": "Findings table or conflicts section cites specific overlap or redundancy (if any) between this rule and ~/.claude/CLAUDE.md or ~/.claude/skills/CLAUDE.md by line number",
+      "passed": false,
+      "evidence": "The 'Conflicts and redundancies' section only states 'No conflicts found against `~/.claude/CLAUDE.md`, `/Users/gregory.rome/CLAUDE.md`, or `~/.claude/skills/CLAUDE.md` \u2014 none of those cover skill/agent-authoring style, so this file adds new, non-overlapping guidance.' No line numbers from either CLAUDE.md are cited anywhere; the only line-numbered redundancy cited (Line 32) is compared against `code.claude.com/docs/en/memory`, not against ~/.claude/CLAUDE.md or ~/.claude/skills/CLAUDE.md as the assertion requires."
+    },
+    {
+      "text": "Output provides exactly one full-file rewrite, not multiple alternative versions",
+      "passed": true,
+      "evidence": "Only a single ```markdown code block appears under the '## Rewrite' heading, containing one complete frontmatter+body version \u2014 no alternate versions are offered."
+    },
+    {
+      "text": "Output does not reference evals.json or SKILL.md-specific best practices, since the target is a rules file, not a SKILL.md",
+      "passed": false,
+      "evidence": "The response opens with 'Not a SKILL.md, so no evals check applies.' \u2014 this explicitly references both 'evals' (evals.json check) and 'SKILL.md' terminology despite the target being a rules file, violating the assertion's requirement to avoid such references."
+    }
+  ],
+  "summary": {
+    "passed": 2,
+    "failed": 2,
+    "total": 4,
+    "pass_rate": 0.5
+  }
+}

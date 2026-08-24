@@ -1,0 +1,30 @@
+{
+  "assertion_results": [
+    {
+      "text": "Findings table includes a row noting the absence of evals/evals.json for this skill",
+      "passed": true,
+      "evidence": "Last row of findings table: \"| n/a | Evals | No `evals/evals.json`. Output quality is unvalidated; there is no baseline showing the skill beats the raw tool schemas. | `ls evals` \u2192 No such file or directory |\""
+    },
+    {
+      "text": "The missing evals.json is described as a finding/note, not phrased as a blocking failure",
+      "passed": true,
+      "evidence": "Phrased descriptively as a table row category 'Evals' with rationale ('Output quality is unvalidated; there is no baseline...'), not as a hard/blocking failure or a reason the review can't proceed. Also stated upfront neutrally: 'No `evals/` directory exists.'"
+    },
+    {
+      "text": "Conflicts/redundancies section cites specific line numbers from the target and from ~/.claude/skills/CLAUDE.md or ~/.claude/CLAUDE.md where relevant",
+      "passed": false,
+      "evidence": "Target line numbers are cited extensively (L326, L291, L344-351, L50-56, L80-83, etc.), but the CLAUDE.md citation only names a section, not a line: \"~/.claude/CLAUDE.md (*Philosophy*) says \\\"**Ask first on big decisions** \u2014 ask before \u2026 external API mutations.\\\"\" No line number is given for this quote, and ~/.claude/skills/CLAUDE.md is never referenced anywhere in the response."
+    },
+    {
+      "text": "Output ends without a closing summary paragraph",
+      "passed": true,
+      "evidence": "Response ends with \"Next action: `diff` the two files side by side \u2014 `code --diff ~/.claude/skills/incident/SKILL.md ~/.claude/skills/instructions-review-workspace/incident-SKILL-rewrite.md`.\" \u2014 a concrete next action, not a recap/summary of what was done."
+    }
+  ],
+  "summary": {
+    "passed": 3,
+    "failed": 1,
+    "total": 4,
+    "pass_rate": 0.75
+  }
+}

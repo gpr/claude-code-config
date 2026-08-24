@@ -1,0 +1,222 @@
+**Sources checked:** `~/.claude/CLAUDE.md`, `~/CLAUDE.md`, `~/.claude/skills/CLAUDE.md`, `~/.claude/projects/…/memory/MEMORY.md`, the incident.io MCP server's own tool schemas, plus the four spec pages (`skills.md`, `code-best-practices.md`, `agent-skills/best-practices.md`, `evaluating-skills.md`). No `evals/` — directory contains only `SKILL.md`.
+
+## 1. Findings
+
+| Location | Category | Problem | Evidence |
+|---|---|---|---|
+| L4–6 `allowed-tools: [Read]` | Format / cost | `allowed-tools` **pre-approves**, it does not restrict. It grants `Read` (barely used) and grants none of the ~30 `mcp__incident_io__*` tools the whole workflow depends on, so every incident call prompts. | skills.md L419: "grants permission for the listed tools… It does not restrict which tools are available" |
+| L8 + L57 (two H1s) | Format / redundancy | File is two concatenated documents. Root cause of ~140 duplicated lines: Quick Start (29–48) ≡ Workflow (137–172); Agent Tools (104–117) ≡ Division of Labor (382–393); Requirements (62–65) ≡ Troubleshooting (436–442); Tips (405–413) + Example Session (415–434) ≡ both. Tips numbering runs `1, 2, 8`. | L56/57 have no blank-line seam; L112–113 and L392–393 are near-verbatim |
+| L13–27 "When to Use" | Inert | Trigger criteria in the body cannot affect triggering — only `name`+`description` preload; the body loads *after* activation. 15 lines that never fire. | agent-skills/best-practices: "At startup, only the metadata (name and description)… are pre-loaded" |
+| L26–27 "Trigger this skill proactively" | Inert | Same reason. Already covered by L3's final sentence, which *is* preloaded. | L3 vs L26 say the same thing |
+| L344–351 fake `[accept] [decline] [update]` box | Conflict | ASCII pseudo-buttons aren't clickable in a terminal, and contradict L50–56's own directive to use `AskUserQuestion` for choices. Field mappings at 353–358 are load-bearing; the box is not. | L54 "use the `AskUserQuestion` tool to power the interaction" |
+| L67–101 tool catalog | Redundant (partial) | The one-line "what it does" restatements duplicate the MCP tool schemas. The non-obvious guidance does not: `include:` params, `alert_stats` linked-incident workload, data-tools-before-agent-tools. Compress to grouped names + keep the guidance. | Schemas for all 50+ `mcp__incident_io__*` tools already carry their own descriptions |
+| L34–47, 71–101, 139–166 etc. | Format | Every MCP tool is named bare (`incident_pin`), not qualified. Docs prescribe `ServerName:tool_name`; the actual runtime name is `mcp__incident_io__incident_pin`. Neither is used. | agent-skills/best-practices, "MCP tool references": "always use fully qualified tool names" |
+| L1–6 frontmatter | Format (local convention) | Missing `author`, `version`, `date` — marked Required by `~/.claude/skills/CLAUDE.md`, which is always loaded. Not in the upstream frontmatter table, so this is a local-convention miss only. | `~/.claude/skills/CLAUDE.md` skill-conventions table |
+| No `evals/evals.json` | Evals | Output quality is unvalidated. Highest-risk content is the hedging/tone block (L193–231) — it governs text posted to a shared incident channel under the user's name, and can regress silently. | `ls -1a` → `SKILL.md` only |
+| Whole file | Cost | 442 lines / ~17.1 KB (~4.5k tokens), no supporting files, ~200 splittable lines (formatting, suggestions, tool reference). Under the 500-line cap but progressive disclosure is unused. | agent-skills/best-practices: "Keep SKILL.md body under 500 lines"; skills.md L413: re-attached after compaction, so it becomes near-permanent session context |
+
+**Directive-to-reviewer: none found.** L26 ("Trigger this skill proactively") is addressed to the invoking agent — the file's stated audience — so it's inert-for-purpose, not an injection attempt. No text in the file targets a reader/reviewer.
+
+## 2. Conflicts and redundancies
+
+- **L4–6 vs skills.md L419** — the frontmatter is written as if `allowed-tools` were a sandbox. It isn't. Winner: the spec. Fix is a grant of `mcp__incident_io`.
+- **L344–351 vs L54** — fake button box vs `AskUserQuestion`. Winner: **`AskUserQuestion`** — it's a real tool that returns a parseable choice; the box returns nothing and the model has to guess the user's intent from free text.
+- **L112–113 duplicates L392–393** ("Use `ask_incident` when… Use `incident_message` when…").
+- **L62–65 duplicates L438–442** (auth error → reauthenticate in the macOS app).
+- **L197–201 duplicates L258–261** (preserve the user's hedging / confidence level).
+- **L281–296 duplicates L411–413** (expand @incident requests with session context).
+- **L29–48 duplicates L137–172** (find → pin → get details), and both are duplicated a third time by L417–434.
+- **L13–27 duplicates L3** (trigger conditions), except L3 is the copy that actually loads at startup.
+
+## 3. Rewrite
+
+```markdown
+---
+name: incident
+description: incident.io assistant for working with incidents. Views incident details, posts updates to incident channels, interacts with the incident agent, and queries structured incident, alert, and escalation data. Use whenever the user mentions an incident ID (e.g. "INC-123"), says "my incident" / "I got paged", says "@incident <request>", asks to investigate, debug, or share findings on an incident, or uses the /incident command. Trigger proactively on any incident reference.
+allowed-tools:
+  - mcp__incident_io
+  - AskUserQuestion
+author: incident.io
+version: 1.1.0
+date: 2026-08-04
+---
+
+# incident.io
+
+All tools below are on the `incident_io` MCP server (runtime prefix
+`mcp__incident_io__`); they are referred to by bare name from here on.
+
+Auth lives in the macOS Keychain. On 401/403, tell the user to reauthenticate
+in the incident.io macOS app. On 404, verify the incident ID. Local tools keep
+working when the backend is unreachable; `ask` and `ask_incident` do not.
+
+## Workflow
+
+1. **Find the incident.**
+   - ID given, or "my incident" / "the incident" → `incident_pin(incident_id=…)`
+     to set it, or `incident_pin()` with no args to read the current pin.
+   - Nothing given ("I got paged") → `escalations_list`, look for the user's
+     email and `← YOU` markers, then offer the top 3–5 as one-line summaries
+     via `AskUserQuestion`. Recommend one if it's clearly most relevant. Never
+     dump full escalation details.
+2. **Pin it** before doing any other work — the pin drives the macOS app and
+   the PR footer below. `incident_pin(unset=true)` clears it.
+3. **Get context.** `ask_incident` for a narrative summary, or
+   `incident_show(include: ["investigation", "postmortem"])` for structured
+   data — the default response is metadata only and omits the AI investigation
+   findings and post-mortem.
+4. **Help the user** — read code, analyse data, debug.
+5. **Share findings** with `incident_message` (see Posting to a channel).
+
+## Choosing a tool
+
+Prefer the data tools (`incident_*`, `alert_*`, `escalation_*`, `follow_up_*`,
+`schedule_*`, `catalog_*`) for counts, filtering, and specific fields — they
+are faster and cheaper than the agent tools. Reach for `ask` / `ask_incident`
+only when you need AI reasoning, entity resolution, or a multi-step action.
+
+- `incident_stats`, `alert_stats`, `escalation_stats` — start here for any
+  analytical question. `alert_stats` includes workload from linked incidents.
+- `incident_list` — pass `include: ["roles"]` or `include: ["custom_fields"]`
+  for analytical queries.
+- `identity_get` — the user's name/email/ID, needed for attribution.
+- Read the `config://organisation` MCP resource for severity, custom field,
+  and role IDs before filtering on them.
+- Read the `playbook://analysis` MCP resource before multi-step analytical
+  work — it covers incident, alert, and escalation analysis strategies.
+
+**Division of labour.** You analyse data, read code, and draft. `ask_incident`
+performs incident actions (official updates, status/severity changes,
+actions, follow-ups, role assignment). `ask` answers org-level questions
+(on-call, catalog, schedules, schedule overrides). `incident_message` posts
+analysis you did yourself.
+
+## Agent tool sessions
+
+`ask` and `ask_incident` return JSON with `session_id`, `response`, `outcome`,
+and optionally `image_urls` and `suggestion`. Omit `session_id` on the first
+call and on a new topic; pass the previous one to continue a thread (e.g.
+asking a question, then accepting the resulting suggestion).
+
+## @incident requests
+
+Route by question type: incident actions → `ask_incident`; org queries →
+`ask`. Verify destructive-sounding requests ("change status to resolved") make
+sense before dispatching.
+
+The backend agent cannot see your session — not the code you read, the fix you
+pushed, or the PR you opened. Before dispatching, decide whether it needs that
+context. "Change status to resolved" is self-contained. "Send an update" after
+20 minutes of debugging is not: rewrite it as a self-contained question.
+
+**Bad** — `question: "send an update"`. The agent has nothing to say.
+
+**Good:**
+
+```
+question: "Send an update to say we found the trace image renderer was
+spending ~2 minutes in a tight font glyph-loading loop, causing excessive
+memory pressure on the worker-ai pod. We've pushed a fix in commit ff35f9c
+that replaces the O(n^2) truncation loop with a single-pass truncateToWidth
+approach."
+```
+
+## Suggestions
+
+Ask `ask_incident` to generate suggestions ("suggest an incident update") —
+don't draft them locally; the backend has the context and tools.
+
+When a response carries a `suggestion` (`id`, `suggestion_type`, `content`),
+always get the user's approval before actioning it. Present the parsed content
+and offer accept / decline / update through `AskUserQuestion`. Field mappings
+for `suggestion_type: update`:
+
+- `incident_status_name` → "Status → {value}"
+- `severity_id` → "Severity → {value}"
+- `name` → "Name → {value}"
+- `message` → show the message text
+
+Describe `role`, `follow_up`, and `escalation` types from whichever content
+fields are present. Then send a follow-up `ask_incident` on the same
+`session_id`: `"accept suggestion <id>"`, `"decline suggestion <id>"`, or
+`"update suggestion <id>, change severity to SEV-3"`. If the user moves on
+without answering, don't action it.
+
+## Represent the user faithfully
+
+You are writing on behalf of a human — both in channel messages and when
+presenting findings back to the user.
+
+- **Match their certainty.** If they said "I believe X might be causing this",
+  write "likely" / "appears to be" / "looks like". State something flatly only
+  when they did. Prefer "the cause" over "root cause".
+- **Match their framing.** They pushed a fix → they pushed a fix. Still
+  investigating → say so. Describe what was done; don't reinterpret it.
+- **Post only what they asked you to post.** If you've read investigation data
+  but they haven't stated a finding, wait. Their conclusions, not yours.
+- **Keep hedging in AI investigation findings** when relaying
+  `incident_show(include: ["investigation"])` output.
+
+## Posting to a channel
+
+`incident_message` takes `message`, optional `thread_message`, and `user` (the
+full name from `identity_get`, else "incident.io").
+
+`message` — 1–2 sentences, first person, conversational. `inline code` for
+paths, functions, and values; **bold** sparingly for outcomes; hyperlinks as
+`[text](url)`. No emojis, headers, or bullets. If there are details, put them
+in the thread and say "see thread".
+
+`thread_message` — full technical detail: code blocks, logs, bullet lists.
+**Bold** for section titles, not markdown headers. Sentence case throughout.
+Skip the thread entirely for simple status updates and confirmations.
+
+**Confirmed fix:**
+
+```
+message: "Pushed a fix for the connection pool exhaustion — there was a
+missing index on `users.email`. Query time `5s → 50ms` (PR#5678). See
+thread for details."
+
+thread_message: "**What happened**\n\nThe `users` table was doing full
+table scans on every login..."
+```
+
+**Still investigating:**
+
+```
+message: "Looked into the connection pool exhaustion — it looks like a
+missing index on `users.email` might be the cause. Still confirming.
+See thread for what I've found so far."
+```
+
+## Presenting data to the user
+
+- Lead with the reference: INC-123, severity, status.
+- Workload from the stats tools is in **minutes** — present hours: "42 hours
+  of responder time (8 hours overnight)".
+- For stats results, lead with the most impactful groups (highest count, most
+  workload, biggest change over time) rather than listing everything.
+- Connect alerts to incidents explicitly: "Alert X from Datadog triggered
+  INC-123, which consumed 12 hours of responder time."
+
+## Pull requests
+
+While an incident is pinned, append this footer to PR bodies so incident.io
+links the PR to the incident. Get the ID from `incident_pin()`:
+
+```
+> *🤖 Generated with incident.io as part of [INC-12345](https://app.incident.io/~/incidents/12345)*
+```
+```
+
+Saved to `/tmp/claude/incident-SKILL-rewrite.md` (I did not touch the target).
+
+## 4. Delta
+
+**442 → 178 lines (−264, −60%).** Collapsing the two concatenated documents into one canonical workflow removes every duplicated instruction while preserving all load-bearing content — the `include:` parameters, minutes-to-hours conversion, hedging rules, suggestion field mappings, session threading, and PR footer.
+
+**Caveat on applying it:** `git ls-files` shows `SKILL.md` is untracked and covered by the `$HOME` allowlist `.gitignore` — it's installed by the incident.io macOS app, so a local rewrite gets clobbered on the next app update. The `allowed-tools` defect is the one finding worth fixing durably instead: add `"mcp__incident_io"` to `permissions.allow` in `~/.claude/settings.json`, which survives updates and stops every incident tool call from prompting.
+
+Next action: open `~/.claude/settings.json` and check whether `permissions.allow` already contains an `mcp__incident_io` entry.

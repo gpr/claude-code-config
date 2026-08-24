@@ -1,0 +1,30 @@
+{
+  "assertion_results": [
+    {
+      "text": "Output contains a findings table with columns Location, Category, Problem, Evidence",
+      "passed": false,
+      "evidence": "Response contains no table at all. It only says 'No content changes needed \u2014 file already reads as I quoted it above.' with no Location/Category/Problem/Evidence structure."
+    },
+    {
+      "text": "Output contains a single rewritten full-file version of the CLAUDE.md, not a diff",
+      "passed": false,
+      "evidence": "No rewritten file content is present anywhere in the response \u2014 it explicitly states 'No content changes needed' and provides no file text."
+    },
+    {
+      "text": "Output reports a line-count delta (old count vs new count, or a signed delta) with a one-sentence rationale",
+      "passed": true,
+      "evidence": "\"Line-count delta: 0.** Rationale: every line is specific and non-default (numeric thresholds, non-obvious tool preferences, project-specific commit taxonomy) \u2014 nothing meets the \\\"would removing this cause a mistake?\\\" cut bar from the best-practices doc.\""
+    },
+    {
+      "text": "Output does not mention evals.json or evals/ (only applicable to SKILL.md targets)",
+      "passed": true,
+      "evidence": "The response text contains no occurrence of 'evals.json' or 'evals/' anywhere."
+    }
+  ],
+  "summary": {
+    "passed": 2,
+    "failed": 2,
+    "total": 4,
+    "pass_rate": 0.5
+  }
+}

@@ -1,0 +1,5 @@
+**Line-count delta**: 44 → 43 lines (net −1: added a `.claude/rules/**/*.md` path, made agents glob recursive, dropped the self-evident "use markdown headers" bullet).
+
+**Rationale**: closed the self-exclusion gap (rules now govern their own directory), made the agents glob depth-consistent with skills, cut one inert bullet — no change to the load-bearing content, which was already well-scoped and non-redundant with CLAUDE.md.
+
+Next action: run `git diff ~/.claude/rules/instructions.md` to confirm the change before committing.

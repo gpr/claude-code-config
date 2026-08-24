@@ -1,0 +1,5 @@
+**Line-count delta:** 47 → 42 lines (−5). Removed the `## Response style` section — it was a verbatim duplicate of your ADHD output style's rule 10, costing tokens twice every session for no behavioral change.
+
+Rest of the file (Tools, CLI table, Philosophy, Workflow, Code Quality) stayed — each bullet is specific and changes behavior beyond model defaults, so it's not actually bloated; it just had one redundant section.
+
+Next: none — file's written, done.

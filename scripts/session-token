@@ -158,6 +158,38 @@ def first_user_text(records: list[dict]) -> str | None:
     return None
 
 
+def merge_assistant_turns(records: list[dict]) -> list[dict]:
+    """Reassemble logical assistant turns from the transcript.
+
+    Claude Code writes one JSONL record per content block of a multi-block
+    assistant turn (thinking/text/tool_use, or several parallel tool_use
+    calls), and every one of those records repeats the *same* full-turn
+    `usage` — so summing usage record-by-record overcounts input/output/
+    cache tokens by however many blocks a turn happened to have. Records
+    belonging to the same turn share `message.id`; merge their content
+    blocks back together and keep the (identical) usage/model only once.
+    """
+    merged: dict[str, dict] = {}
+    order: list[str] = []
+    for record in records:
+        if record.get("type") != "assistant":
+            continue
+        message = record.get("message", {})
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        msg_id = message.get("id")
+        if msg_id not in merged:
+            merged[msg_id] = {
+                "model": message.get("model"),
+                "usage": message.get("usage") or {},
+                "content": [],
+            }
+            order.append(msg_id)
+        merged[msg_id]["content"].extend(content)
+    return [merged[msg_id] for msg_id in order]
+
+
 def process_records(
     records: list[dict],
     report: SessionReport,
@@ -165,23 +197,18 @@ def process_records(
     is_main: bool,
     subagent_label: str | None,
 ) -> None:
-    for record in records:
-        if record.get("type") == "user" and is_main and is_human_turn(record):
-            report.human_turns += 1
+    if is_main:
+        for record in records:
+            if record.get("type") == "user" and is_human_turn(record):
+                report.human_turns += 1
 
-        if record.get("type") != "assistant":
-            continue
-
-        message = record.get("message", {})
-        content = message.get("content")
-        if not isinstance(content, list):
-            continue
-
-        model = message.get("model")
+    for turn_data in merge_assistant_turns(records):
+        content = turn_data["content"]
+        model = turn_data["model"]
         if model:
             report.models.add(model)
 
-        usage = message.get("usage") or {}
+        usage = turn_data["usage"]
         turn = Usage()
         turn.add_raw(usage, count_turn=True)
 
